@@ -858,10 +858,12 @@ void main() {
         findsOneWidget,
       );
       f.failWrites = true;
+      await _show(tester, find.text('Save'));
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Could not save.'), findsOneWidget);
       f.failWrites = false;
+      await _show(tester, find.text('Save'));
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(

@@ -49,17 +49,38 @@ class InstallmentsScreen extends StatelessWidget {
                 child: LinearProgressIndicator(minHeight: 2),
               ),
             if (currencies.isNotEmpty)
-              Text('Remaining to pay', style: theme.textTheme.bodySmall),
-            for (final currency in currencies) ...[
-              const SizedBox(height: 6),
-              Text(
-                money(
-                  totalRemainingInstallments(data.plans, currency: currency),
-                  currency,
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total remaining to pay',
+                        style: theme.textTheme.labelMedium,
+                      ),
+                      for (final currency in currencies) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          money(
+                            totalRemainingInstallments(
+                              data.plans,
+                              currency: currency,
+                            ),
+                            currency,
+                          ),
+                          style: theme.textTheme.displaySmall,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Across ${active.length} active ${active.length == 1 ? 'plan' : 'plans'}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
-                style: theme.textTheme.headlineMedium,
               ),
-            ],
             const SizedBox(height: 10),
             Text(
               'Mark paid updates the plan only. Capture the cash payment or add it in Expenses so spending reflects it.',
@@ -113,9 +134,27 @@ class InstallmentsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(p.name, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 2),
-            Text(subtitle, style: theme.textTheme.bodySmall),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(p.name, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Edit plan',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: busy ? null : () => _form(context, data, plan: p),
+                  icon: Icon(Icons.edit_outlined, size: 20, color: c.muted),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -140,6 +179,25 @@ class InstallmentsScreen extends StatelessWidget {
                 Text(
                   '${p.remainingCount} left',
                   style: theme.textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Remaining to pay',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
+                  ),
+                ),
+                Text(
+                  money(p.remainingBalance, p.currency),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: live ? c.ink : c.muted,
+                  ),
                 ),
               ],
             ),
@@ -171,10 +229,6 @@ class InstallmentsScreen extends StatelessWidget {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text(
-                  'Remaining: ${money(p.remainingBalance, p.currency)}',
-                  style: theme.textTheme.bodySmall,
-                ),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -207,14 +261,12 @@ class InstallmentsScreen extends StatelessWidget {
             if (live && date != null) const SizedBox(height: 4),
             Row(
               children: [
-                if (live)
+                if (live && date == null)
                   TextButton(
                     onPressed: busy
                         ? null
                         : () => _form(context, data, plan: p),
-                    child: Text(
-                      date == null ? 'Confirm schedule' : 'Edit schedule',
-                    ),
+                    child: const Text('Confirm schedule'),
                   ),
                 TextButton(
                   onPressed: busy
@@ -269,12 +321,20 @@ class InstallmentsScreen extends StatelessWidget {
     BuildContext context,
     AppData data, {
     InstallmentPlan? plan,
-  }) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => ProfileRequired(
-      data: data,
-      builder: (_) => _PlanForm(data: data, plan: plan),
+  }) => Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          // Back always works, including while the profile is still loading.
+        ),
+        body: SafeArea(
+          child: ProfileRequired(
+            data: data,
+            builder: (_) => _PlanForm(data: data, plan: plan),
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -303,6 +363,14 @@ class _PlanFormState extends State<_PlanForm> {
     super.initState();
     final plan = widget.plan;
     if (plan != null) {
+      _name.text = plan.name;
+      _provider.text = plan.provider;
+      _kind = installmentKinds.contains(plan.kind) ? plan.kind : 'other';
+      _monthly.text = plan.monthlyAmount == plan.monthlyAmount.roundToDouble()
+          ? plan.monthlyAmount.toStringAsFixed(0)
+          : '${plan.monthlyAmount}';
+      _count.text = '${plan.totalCount}';
+      _paid.text = '${plan.paidCount}';
       _day.text = '${plan.dueDay}';
       final date = plan.nextDueDate;
       if (date != null) {
@@ -333,25 +401,25 @@ class _PlanFormState extends State<_PlanForm> {
     final month = _selectedMonth;
     final amount = parseAmountInput(
       _monthly.text,
-      currency: widget.data.currency,
+      currency: widget.plan?.currency ?? widget.data.currency,
     );
     final count = int.tryParse(_count.text.trim());
     final paid = int.tryParse(_paid.text.trim());
     if (day == null ||
         day < 1 ||
         day > 31 ||
-        (widget.plan != null && month == null) ||
-        (widget.plan == null &&
-            (_name.text.trim().isEmpty ||
-                amount == null ||
-                count == null ||
-                count < 1 ||
-                paid == null ||
-                paid < 0 ||
-                paid > count ||
-                (paid < count && month == null)))) {
+        _name.text.trim().isEmpty ||
+        amount == null ||
+        count == null ||
+        count < 1 ||
+        paid == null ||
+        paid < 0 ||
+        paid > count ||
+        (paid < count && month == null)) {
       setState(
-        () => _error = 'Check the fields, due day 1–31 and next unpaid month (YYYY-MM). Paid cannot exceed total.',
+        () => _error = paid != null && count != null && paid > count
+            ? 'Payments already made (count) cannot exceed the total number of payments.'
+            : 'Check the fields, due day 1–31 and next unpaid month (YYYY-MM).',
       );
       return;
     }
@@ -361,15 +429,25 @@ class _PlanFormState extends State<_PlanForm> {
     });
     try {
       if (widget.plan case final plan?) {
-        await widget.data.setPlanSchedule(plan, dueDay: day, month: month!);
+        await widget.data.updatePlan(
+          plan,
+          name: _name.text,
+          provider: _provider.text,
+          kind: _kind,
+          monthlyAmount: amount,
+          totalCount: count,
+          paidCount: paid,
+          dueDay: day,
+          nextPaymentMonth: month,
+        );
       } else {
         await widget.data.addPlan(
           name: _name.text,
           provider: _provider.text,
           kind: _kind,
-          monthlyAmount: amount!,
-          totalCount: count!,
-          paidCount: paid!,
+          monthlyAmount: amount,
+          totalCount: count,
+          paidCount: paid,
           dueDay: day,
           nextPaymentMonth: month,
         );
@@ -392,7 +470,7 @@ class _PlanFormState extends State<_PlanForm> {
         child: TextField(
           controller: c,
           enabled: !_busy,
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => setState(() => _error = null),
           keyboardType: number
               ? const TextInputType.numberWithOptions(decimal: true)
               : TextInputType.text,
@@ -407,12 +485,7 @@ class _PlanFormState extends State<_PlanForm> {
         ? clampedPaymentDate(month.year, month.month, day)
         : null;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        8,
-        20,
-        24 + MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -423,12 +496,12 @@ class _PlanFormState extends State<_PlanForm> {
               child: Text(
                 widget.plan == null
                     ? 'Add installment plan (${widget.data.currency})'
-                    : 'Confirm earliest unpaid payment',
+                    : 'Edit installment plan',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),
           ),
-          if (widget.plan == null) ...[
+          ...[
             _field(_name, 'What is it for?'),
             _field(_provider, 'Provider (bank, Tabby, ...)'),
             DropdownButtonFormField<String>(
@@ -445,7 +518,7 @@ class _PlanFormState extends State<_PlanForm> {
             const SizedBox(height: 12),
             _field(_monthly, 'Monthly amount', number: true),
             _field(_count, 'Total number of payments', number: true),
-            _field(_paid, 'Already paid', number: true),
+            _field(_paid, 'Payments already made (count, e.g. 6)', number: true),
           ],
           _field(_day, 'Due day of month (1–31)', number: true),
           _field(_month, 'Next unpaid month (YYYY-MM)'),

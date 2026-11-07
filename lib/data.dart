@@ -449,6 +449,82 @@ class AppData extends ChangeNotifier {
     }
   }
 
+  /// Full edit of an existing plan. Guarded like [setPlanSchedule]: the write
+  /// only lands if the plan still has the paid count and date we displayed.
+  Future<void> updatePlan(
+    InstallmentPlan plan, {
+    required String name,
+    required String provider,
+    required String kind,
+    required double monthlyAmount,
+    required int totalCount,
+    required int paidCount,
+    required int dueDay,
+    DateTime? nextPaymentMonth,
+  }) async {
+    final userId = _requireUser();
+    final currency = plan.currency;
+    final unitAmount = isValidMoney(monthlyAmount, currency)
+        ? moneyUnits(monthlyAmount, currency)
+        : -1;
+    if (name.trim().isEmpty ||
+        name.trim().runes.length > 200 ||
+        provider.trim().runes.length > 200 ||
+        !installmentKinds.contains(kind) ||
+        unitAmount < 0 ||
+        totalCount < 1 ||
+        totalCount > 2147483647 ||
+        paidCount < 0 ||
+        paidCount > totalCount ||
+        dueDay < 1 ||
+        dueDay > 31 ||
+        (unitAmount > 0 &&
+            totalCount > maxMoneyUnits(currency) ~/ unitAmount) ||
+        (paidCount < totalCount && nextPaymentMonth == null)) {
+      throw ArgumentError(
+        'Check plan fields, currency precision, counts and the next payment month.',
+      );
+    }
+    final finished = paidCount >= totalCount;
+    final date = finished
+        ? null
+        : clampedPaymentDate(
+            nextPaymentMonth!.year,
+            nextPaymentMonth.month,
+            dueDay,
+          );
+    _beginPlan(plan.id);
+    try {
+      var query = _db
+          .from('installment_plans')
+          .update({
+            'name': name.trim(),
+            'provider': provider.trim(),
+            'kind': kind,
+            'monthly_amount': monthlyAmount,
+            'total_amount': moneyFromUnits(unitAmount * totalCount, currency),
+            'total_count': totalCount,
+            'paid_count': paidCount,
+            'due_day': dueDay,
+            'next_due_date': date == null ? null : _dateText(date),
+            // A finished plan must be inactive; a plan that was finished and
+            // now has payments left becomes active again.
+            'active': finished ? false : (plan.active || plan.isFinished),
+          })
+          .eq('id', plan.id)
+          .eq('user_id', userId)
+          .eq('paid_count', plan.paidCount);
+      query = plan.nextDueDate == null
+          ? query.isFilter('next_due_date', null)
+          : query.eq('next_due_date', _dateText(plan.nextDueDate!));
+      final row = await query.select().single();
+      _cachePlan(row, plan.id);
+      await refresh();
+    } finally {
+      _endPlan(plan.id);
+    }
+  }
+
   Future<void> deletePlan(String id) async {
     final userId = _requireUser();
     _beginPlan(id);
