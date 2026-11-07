@@ -1,0 +1,124 @@
+name: Build iOS IPA
+
+# Builds an UNSIGNED .ipa. Sideloadly signs it with your Apple ID when you install it.
+# Push a tag like v1.0.0 to publish a GitHub Release with the IPA attached.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check required Supabase build secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          missing=()
+          [[ -n "$SUPABASE_URL" ]] || missing+=(SUPABASE_URL)
+          [[ -n "$SUPABASE_ANON_KEY" ]] || missing+=(SUPABASE_ANON_KEY)
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required repository secret(s): %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+      - name: Run portable Edge tests
+        run: node --experimental-strip-types supabase/functions/ci/run-tests.ts
+
+      - name: Check Edge TypeScript
+        shell: bash
+        run: |
+          tool_dir="$RUNNER_TEMP/masarifi-ts-tools"
+          mkdir -p "$tool_dir"
+          npm install --prefix "$tool_dir" --no-save --package-lock=false --ignore-scripts \
+            typescript@5.4.5 \
+            @types/node@22.13.8 \
+            @supabase/supabase-js@2.58.0
+
+          source_files=()
+          while IFS= read -r -d '' source_file; do
+            source_files+=("$source_file")
+          done < <(find supabase/functions -type f -name '*.ts' -print0)
+          "$tool_dir/node_modules/.bin/tsc" \
+            --noEmit \
+            --strict \
+            --skipLibCheck \
+            --target ES2022 \
+            --module ESNext \
+            --moduleResolution bundler \
+            --allowImportingTsExtensions \
+            --lib ES2022,DOM \
+            --types node \
+            --typeRoots "$tool_dir/node_modules/@types" \
+            --baseUrl "$tool_dir/node_modules" \
+            "${source_files[@]}"
+
+      - name: Build iOS (no codesign)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+
+      - name: Package and verify IPA
+        shell: bash
+        run: |
+          app_path="build/ios/iphoneos/Runner.app"
+          test -d "$app_path" || { echo "Missing built app: $app_path" >&2; exit 1; }
+          mkdir Payload
+          ditto "$app_path" Payload/Runner.app
+          test -f Payload/Runner.app/Info.plist
+          ditto -c -k --sequesterRsrc --keepParent Payload Masarifi.ipa
+          test -s Masarifi.ipa
+          unzip -t Masarifi.ipa
+          unzip -Z1 Masarifi.ipa | grep -Fx 'Payload/Runner.app/Info.plist'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Masarifi-ipa
+          path: Masarifi.ipa
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: Masarifi-ipa
+          path: release-assets
+
+      - name: Confirm IPA asset exists
+        run: test -s release-assets/Masarifi.ipa
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: release-assets/Masarifi.ipa
+          fail_on_unmatched_files: true

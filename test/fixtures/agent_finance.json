@@ -1,0 +1,296 @@
+[
+  {
+    "name": "sar-baseline-mtd-and-reserve",
+    "profile": { "currency": "SAR", "monthly_income": 15000 },
+    "plans": [
+      {
+        "id": "sar-phone", "name": "Phone", "provider": "Bank A", "kind": "bnpl", "currency": "SAR",
+        "monthly_amount": 1200.5, "total_amount": 7203, "total_count": 6, "paid_count": 2,
+        "due_day": 15, "next_due_date": "2026-11-15", "active": true
+      }
+    ],
+    "expenses": [
+      { "id": "e1", "amount": 250.25, "currency": "SAR", "merchant": "Market", "category": "groceries", "spent_at": "2026-11-02T09:00:00+00:00" },
+      { "id": "e2", "amount": 99.99, "currency": "SAR", "merchant": "Previous month", "category": "food", "spent_at": "2026-10-31T23:00:00+00:00" },
+      { "id": "e3", "amount": 40, "currency": "USD", "merchant": "Foreign", "category": "other", "spent_at": "2026-11-03T12:00:00+00:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "15000.00",
+      "installments_due_this_month": "1200.50",
+      "spent_this_month": "250.25",
+      "safe_to_spend_this_month": "13549.25",
+      "provisional": false
+    }
+  },
+  {
+    "name": "kwd-exact-fils-and-boundaries",
+    "profile": { "currency": "KWD", "monthly_income": 1234.567 },
+    "plans": [
+      {
+        "id": "kwd-car", "name": "Car loan", "provider": "Bank K", "kind": "loan", "currency": "KWD",
+        "monthly_amount": 100.125, "total_amount": 1001.25, "total_count": 10, "paid_count": 3,
+        "due_day": 5, "next_due_date": "2026-11-05", "active": true
+      }
+    ],
+    "expenses": [
+      { "id": "k1", "amount": 0.001, "currency": "KWD", "merchant": "Start of month", "category": "food", "spent_at": "2026-11-01T00:00:00+00:00" },
+      { "id": "k2", "amount": 12.345, "currency": "KWD", "merchant": "Exactly as of", "category": "shopping", "spent_at": "2026-11-06T10:00:00+00:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "KWD",
+      "monthly_income": "1234.567",
+      "installments_due_this_month": "100.125",
+      "spent_this_month": "12.346",
+      "safe_to_spend_this_month": "1122.096",
+      "provisional": false
+    }
+  },
+  {
+    "name": "aed-two-decimal-offset-timestamp",
+    "profile": { "currency": "AED", "monthly_income": 5000 },
+    "plans": [],
+    "expenses": [
+      { "id": "a1", "amount": 100.1, "currency": "AED", "merchant": "Mall", "category": "shopping", "spent_at": "2026-11-04T08:00:00+04:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "AED",
+      "monthly_income": "5000.00",
+      "installments_due_this_month": "0.00",
+      "spent_this_month": "100.10",
+      "safe_to_spend_this_month": "4899.90",
+      "provisional": false
+    }
+  },
+  {
+    "name": "qar-first-month-reserve",
+    "profile": { "currency": "QAR", "monthly_income": 3000.5 },
+    "plans": [
+      {
+        "id": "qar-laptop", "name": "Laptop", "provider": "Store Q", "kind": "card", "currency": "QAR",
+        "monthly_amount": 200.25, "total_amount": 600.75, "total_count": 3, "paid_count": 0,
+        "due_day": 1, "next_due_date": "2026-11-01", "active": true
+      }
+    ],
+    "expenses": [],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "QAR",
+      "monthly_income": "3000.50",
+      "installments_due_this_month": "200.25",
+      "spent_this_month": "0.00",
+      "safe_to_spend_this_month": "2800.25",
+      "provisional": false
+    }
+  },
+  {
+    "name": "bhd-three-decimal-expense",
+    "profile": { "currency": "BHD", "monthly_income": 800 },
+    "plans": [],
+    "expenses": [
+      { "id": "b1", "amount": 0.5, "currency": "BHD", "merchant": "Cafe", "category": "food", "spent_at": "2026-11-04T10:00:00+00:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "BHD",
+      "monthly_income": "800.000",
+      "installments_due_this_month": "0.000",
+      "spent_this_month": "0.500",
+      "safe_to_spend_this_month": "799.500",
+      "provisional": false
+    }
+  },
+  {
+    "name": "omr-final-installment-reserve",
+    "profile": { "currency": "OMR", "monthly_income": 450.125 },
+    "plans": [
+      {
+        "id": "omr-tv", "name": "Television", "provider": "Store O", "kind": "bnpl", "currency": "OMR",
+        "monthly_amount": 50.05, "total_amount": 600.6, "total_count": 12, "paid_count": 11,
+        "due_day": 20, "next_due_date": "2026-11-20", "active": true
+      }
+    ],
+    "expenses": [
+      { "id": "o1", "amount": 0.125, "currency": "OMR", "merchant": "Bakery", "category": "food", "spent_at": "2026-11-06T09:00:00+00:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "OMR",
+      "monthly_income": "450.125",
+      "installments_due_this_month": "50.050",
+      "spent_this_month": "0.125",
+      "safe_to_spend_this_month": "399.950",
+      "provisional": false
+    }
+  },
+  {
+    "name": "negative-budget-is-reported",
+    "profile": { "currency": "SAR", "monthly_income": 100 },
+    "plans": [],
+    "expenses": [
+      { "id": "n1", "amount": 150, "currency": "SAR", "merchant": "Overspend", "category": "shopping", "spent_at": "2026-11-05T12:00:00+00:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "100.00",
+      "installments_due_this_month": "0.00",
+      "spent_this_month": "150.00",
+      "safe_to_spend_this_month": "-50.00",
+      "provisional": false
+    }
+  },
+  {
+    "name": "month-and-asof-boundaries",
+    "profile": { "currency": "SAR", "monthly_income": 1000 },
+    "plans": [],
+    "expenses": [
+      { "id": "w1", "amount": 20, "currency": "SAR", "merchant": "Before month", "category": "other", "spent_at": "2026-10-31T23:59:59.999999+00:00" },
+      { "id": "w2", "amount": 10, "currency": "SAR", "merchant": "First instant", "category": "other", "spent_at": "2026-11-01T00:00:00+00:00" },
+      { "id": "w3", "amount": 40, "currency": "SAR", "merchant": "After as of", "category": "other", "spent_at": "2026-11-06T10:00:01+00:00" },
+      { "id": "w4", "amount": 5, "currency": "SAR", "merchant": "Just before as of", "category": "other", "spent_at": "2026-11-06T09:59:59.999999+00:00" }
+    ],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "1000.00",
+      "installments_due_this_month": "0.00",
+      "spent_this_month": "15.00",
+      "safe_to_spend_this_month": "985.00",
+      "provisional": false
+    }
+  },
+  {
+    "name": "overdue-reserves-capped-and-future-plan-zero",
+    "profile": { "currency": "SAR", "monthly_income": 10000 },
+    "plans": [
+      {
+        "id": "overdue-long", "name": "Overdue long", "provider": "Bank O", "kind": "loan", "currency": "SAR",
+        "monthly_amount": 100, "total_amount": 1000, "total_count": 10, "paid_count": 2,
+        "due_day": 10, "next_due_date": "2026-08-10", "active": true
+      },
+      {
+        "id": "overdue-capped", "name": "Overdue capped", "provider": "Bank O", "kind": "bnpl", "currency": "SAR",
+        "monthly_amount": 50, "total_amount": 150, "total_count": 3, "paid_count": 1,
+        "due_day": 1, "next_due_date": "2026-07-01", "active": true
+      },
+      {
+        "id": "future-plan", "name": "Future", "provider": "Bank F", "kind": "card", "currency": "SAR",
+        "monthly_amount": 75, "total_amount": 375, "total_count": 5, "paid_count": 0,
+        "due_day": 3, "next_due_date": "2026-12-03", "active": true
+      }
+    ],
+    "expenses": [],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "10000.00",
+      "installments_due_this_month": "500.00",
+      "spent_this_month": "0.00",
+      "safe_to_spend_this_month": "9500.00",
+      "provisional": false
+    }
+  },
+  {
+    "name": "inactive-and-finished-plans-excluded",
+    "profile": { "currency": "SAR", "monthly_income": 500 },
+    "plans": [
+      {
+        "id": "finished", "name": "Finished", "provider": "Bank X", "kind": "loan", "currency": "SAR",
+        "monthly_amount": 300, "total_amount": 1200, "total_count": 4, "paid_count": 4,
+        "due_day": 5, "next_due_date": null, "active": false
+      },
+      {
+        "id": "inactive", "name": "Inactive", "provider": "Bank X", "kind": "loan", "currency": "SAR",
+        "monthly_amount": 200, "total_amount": 1200, "total_count": 6, "paid_count": 2,
+        "due_day": 5, "next_due_date": "2026-11-05", "active": false
+      },
+      {
+        "id": "active-final", "name": "Active", "provider": "Bank Y", "kind": "bnpl", "currency": "SAR",
+        "monthly_amount": 10, "total_amount": 20, "total_count": 2, "paid_count": 0,
+        "due_day": 30, "next_due_date": "2026-11-30", "active": true
+      }
+    ],
+    "expenses": [],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "500.00",
+      "installments_due_this_month": "10.00",
+      "spent_this_month": "0.00",
+      "safe_to_spend_this_month": "490.00",
+      "provisional": false
+    }
+  },
+  {
+    "name": "unset-legacy-schedule-is-provisional",
+    "profile": { "currency": "SAR", "monthly_income": 1000 },
+    "plans": [
+      {
+        "id": "legacy", "name": "Legacy", "provider": "Bank L", "kind": "other", "currency": "SAR",
+        "monthly_amount": 80, "total_amount": 400, "total_count": 5, "paid_count": 1,
+        "due_day": 12, "next_due_date": null, "active": true
+      }
+    ],
+    "expenses": [],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "1000.00",
+      "installments_due_this_month": "80.00",
+      "spent_this_month": "0.00",
+      "safe_to_spend_this_month": "920.00",
+      "provisional": true
+    }
+  },
+  {
+    "name": "leap-day-31-schedule-in-february-2028",
+    "profile": { "currency": "SAR", "monthly_income": 1000 },
+    "plans": [
+      {
+        "id": "leap-31", "name": "Day 31", "provider": "Bank D", "kind": "bnpl", "currency": "SAR",
+        "monthly_amount": 100, "total_amount": 600, "total_count": 6, "paid_count": 1,
+        "due_day": 31, "next_due_date": "2028-02-29", "active": true
+      },
+      {
+        "id": "leap-29", "name": "Day 29", "provider": "Bank D", "kind": "bnpl", "currency": "SAR",
+        "monthly_amount": 25, "total_amount": 100, "total_count": 4, "paid_count": 0,
+        "due_day": 29, "next_due_date": "2028-02-29", "active": true
+      }
+    ],
+    "expenses": [],
+    "calendar": { "asOf": "2028-02-29T12:00:00.000Z", "monthStart": "2028-02-01T00:00:00.000Z", "year": 2028, "month": 2 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "1000.00",
+      "installments_due_this_month": "125.00",
+      "spent_this_month": "0.00",
+      "safe_to_spend_this_month": "875.00",
+      "provisional": false
+    }
+  },
+  {
+    "name": "foreign-currency-plan-is-ignored",
+    "profile": { "currency": "SAR", "monthly_income": 2000 },
+    "plans": [
+      {
+        "id": "kwd-plan", "name": "Kuwaiti plan", "provider": "Bank K", "kind": "loan", "currency": "KWD",
+        "monthly_amount": 100, "total_amount": 300, "total_count": 3, "paid_count": 0,
+        "due_day": 10, "next_due_date": null, "active": true
+      }
+    ],
+    "expenses": [],
+    "calendar": { "asOf": "2026-11-06T10:00:00.000Z", "monthStart": "2026-11-01T00:00:00.000Z", "year": 2026, "month": 11 },
+    "expected": {
+      "currency": "SAR",
+      "monthly_income": "2000.00",
+      "installments_due_this_month": "0.00",
+      "spent_this_month": "0.00",
+      "safe_to_spend_this_month": "2000.00",
+      "provisional": false
+    }
+  }
+]
