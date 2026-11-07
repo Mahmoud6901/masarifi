@@ -6,6 +6,7 @@ import '../format.dart';
 import '../logic.dart';
 import '../models.dart';
 import '../money.dart';
+import '../theme.dart';
 import 'profile_required.dart';
 
 class ExpensesScreen extends StatelessWidget {
@@ -14,6 +15,8 @@ class ExpensesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = context.watch<AppData>();
+    final theme = Theme.of(context);
+    final c = context.mc;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _addExpense(context),
@@ -24,51 +27,97 @@ class ExpensesScreen extends StatelessWidget {
         onRefresh: data.refresh,
         child: data.expenses.isEmpty
             ? ListView(
-                children: const [
-                  Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text(
-                      'No expenses yet.',
-                      textAlign: TextAlign.center,
-                    ),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 24),
+                children: [
+                  Text(
+                    'No expenses yet.',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
                   ),
                 ],
               )
             : ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 100),
                 itemCount: data.expenses.length,
                 itemBuilder: (context, i) {
                   final e = data.expenses[i];
-                  return Dismissible(
-                    key: ValueKey(e.id),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      color: Theme.of(context).colorScheme.error,
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 16),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    confirmDismiss: (_) async {
-                      try {
-                        await data.deleteExpense(e.id);
-                        return true;
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Could not delete. Try again.'),
-                            ),
-                          );
-                        }
-                        return false;
-                      }
-                    },
-                    child: ListTile(
-                      leading: Icon(
-                        e.source == 'apple_pay' ? Icons.apple : Icons.edit_note,
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Dismissible(
+                      key: ValueKey(e.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        decoration: BoxDecoration(
+                          color: c.negative,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        alignment: AlignmentDirectional.centerEnd,
+                        padding: const EdgeInsetsDirectional.only(end: 20),
+                        child: Icon(Icons.delete_outline, color: c.canvas),
                       ),
-                      title: Text(e.merchant),
-                      subtitle: Text('${e.category} · ${shortDate(e.spentAt)}'),
-                      trailing: Text(money(e.amount, e.currency)),
+                      confirmDismiss: (_) async {
+                        try {
+                          await data.deleteExpense(e.id);
+                          return true;
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Could not delete. Try again.'),
+                              ),
+                            );
+                          }
+                          return false;
+                        }
+                      },
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: c.well,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  e.source == 'apple_pay'
+                                      ? Icons.apple
+                                      : Icons.edit_note_outlined,
+                                  size: 20,
+                                  color: c.ink,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      e.merchant,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                    Text(
+                                      '${e.category} · ${shortDate(e.spentAt)}',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                money(e.amount, e.currency),
+                                style: theme.textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -152,10 +201,10 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
   Widget build(BuildContext context) => SingleChildScrollView(
     child: Padding(
       padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        16 + MediaQuery.of(context).viewInsets.bottom,
+        20,
+        8,
+        20,
+        24 + MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -165,12 +214,14 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
             enabled: !_busy,
             decoration: const InputDecoration(labelText: 'Place'),
           ),
+          const SizedBox(height: 12),
           TextField(
             controller: _amount,
             enabled: !_busy,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(labelText: 'Amount'),
           ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _category,
             items: [
@@ -187,7 +238,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                style: TextStyle(color: context.mc.negative),
               ),
             ),
           const SizedBox(height: 12),

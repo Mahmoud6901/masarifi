@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../data.dart';
 import '../logic.dart';
+import '../theme.dart';
 import 'profile_required.dart';
 
 /// Chat with the AI agent, plus a "find a place" form that builds a query for it.
@@ -109,49 +110,63 @@ class _AssistantScreenState extends State<AssistantScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.mc;
     final data = context.watch<AppData>();
+    const pillBorder = BorderRadius.all(Radius.circular(28));
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(8),
-          child: Wrap(
-            spacing: 8,
-            children: [
-              ActionChip(
-                avatar: const Icon(Icons.place_outlined, size: 18),
-                label: const Text('Find a place'),
-                onPressed: _busy || _placeSheetOpen ? null : _findPlace,
-              ),
-              ActionChip(
-                label: const Text('Plan my month'),
-                onPressed: () => _send(
-                  'Plan my spending for the rest of this month based on my installments and expenses.',
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 16, 20, 8),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.place_outlined, size: 18),
+                  label: const Text('Find a place'),
+                  onPressed: _busy || _placeSheetOpen ? null : _findPlace,
                 ),
-              ),
-              ActionChip(
-                label: const Text('Can I afford a new installment?'),
-                onPressed: _busy || data.profile == null
-                    ? null
-                    : () => _input.text =
-                          'Can I afford a purchase of  ${data.currency} over  months?',
-              ),
-            ],
+                ActionChip(
+                  label: const Text('Plan my month'),
+                  onPressed: () => _send(
+                    'Plan my spending for the rest of this month based on my installments and expenses.',
+                  ),
+                ),
+                ActionChip(
+                  label: const Text('Can I afford a new installment?'),
+                  onPressed: _busy || data.profile == null
+                      ? null
+                      : () => _input.text =
+                            'Can I afford a purchase of  ${data.currency} over  months?',
+                ),
+              ],
+            ),
           ),
         ),
         if (data.profile == null)
-          TextButton(
-            onPressed: data.loading ? null : data.refresh,
-            child: const Text('Load profile currency'),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 12),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: data.loading ? null : data.refresh,
+                child: const Text('Load profile currency'),
+              ),
+            ),
           ),
         if (_requestError != null)
           Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 12, 4),
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
                   _requestError!,
-                  style: TextStyle(color: theme.colorScheme.error),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: c.negative,
+                  ),
                 ),
                 TextButton(
                   onPressed: _busy ? null : _retry,
@@ -162,18 +177,22 @@ class _AssistantScreenState extends State<AssistantScreen> {
           ),
         Expanded(
           child: _history.isEmpty
-              ? const Center(
+              ? Align(
+                  alignment: AlignmentDirectional.topStart,
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsetsDirectional.fromSTEB(20, 20, 20, 0),
                     child: Text(
                       'Ask about your spending, installments, or find the best place for what you need.',
-                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: c.muted,
+                        height: 1.6,
+                      ),
                     ),
                   ),
                 )
               : ListView.builder(
                   controller: _scroll,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsetsDirectional.fromSTEB(20, 12, 20, 12),
                   itemCount: _history.length + (_busy ? 1 : 0),
                   itemBuilder: (context, i) {
                     if (i == _history.length) {
@@ -197,24 +216,30 @@ class _AssistantScreenState extends State<AssistantScreen> {
                           : AlignmentDirectional.centerStart,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         constraints: BoxConstraints(
                           maxWidth: MediaQuery.of(context).size.width * 0.85,
                         ),
                         decoration: BoxDecoration(
-                          color: mine
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(14),
+                          color: mine ? c.card : c.well,
+                          borderRadius: BorderRadius.circular(18),
                         ),
-                        child: SelectableText(m['content']!),
+                        child: SelectableText(
+                          m['content']!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            height: 1.55,
+                          ),
+                        ),
                       ),
                     );
                   },
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 12, 12),
           child: Row(
             children: [
               Expanded(
@@ -224,14 +249,38 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   maxLines: 4,
                   textInputAction: TextInputAction.send,
                   onSubmitted: _send,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Ask Masarifi...',
+                    contentPadding: const EdgeInsetsDirectional.fromSTEB(
+                      22,
+                      14,
+                      22,
+                      14,
+                    ),
+                    border: const OutlineInputBorder(
+                      borderRadius: pillBorder,
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: const OutlineInputBorder(
+                      borderRadius: pillBorder,
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: pillBorder,
+                      borderSide: BorderSide(
+                        color: c.ink.withValues(alpha: 0.7),
+                      ),
+                    ),
                   ),
                 ),
               ),
-              IconButton(
+              const SizedBox(width: 4),
+              IconButton.outlined(
                 onPressed: _busy ? null : () => _send(_input.text),
-                icon: const Icon(Icons.send),
+                icon: const Icon(Icons.send, size: 20),
+                style: IconButton.styleFrom(
+                  side: BorderSide(color: c.muted.withValues(alpha: 0.45)),
+                ),
               ),
             ],
           ),
@@ -336,13 +385,18 @@ class _FindPlaceSheetState extends State<_FindPlaceSheet> {
             labelText: 'Budget (${widget.currency}, optional)',
           ),
         ),
-        const Text(
+        const SizedBox(height: 4),
+        Text(
           'Distances use the approximate area centre. Prices may be estimates.',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         if (_error != null)
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _error!,
+              style: TextStyle(color: context.mc.negative),
+            ),
           ),
         const SizedBox(height: 12),
         FilledButton(

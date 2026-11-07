@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'data.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
+import 'theme.dart';
 
 // Provided at build time: --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
@@ -63,15 +64,9 @@ class MasarifiApp extends StatelessWidget {
     return MaterialApp(
       title: 'Masarifi مصاريفي',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF0B7A5B),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorSchemeSeed: const Color(0xFF0B7A5B),
-        brightness: Brightness.dark,
-        useMaterial3: true,
-      ),
+      theme: masarifiTheme(Brightness.light),
+      darkTheme: masarifiTheme(Brightness.dark),
+      themeMode: ThemeMode.system,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('en'), Locale('ar')],
       home: AuthGate(client: client),

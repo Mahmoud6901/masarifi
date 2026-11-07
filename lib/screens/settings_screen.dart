@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../data.dart';
 import '../logic.dart';
 import '../format.dart';
+import '../theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -38,151 +39,206 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? '$baseUrl/functions/v1/ingest'
         : null;
 
+    final theme = Theme.of(context);
+    final c = context.mc;
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 32),
       children: [
-        Text('Account', style: Theme.of(context).textTheme.titleMedium),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(data.accountEmail),
-          trailing: TextButton(
-            onPressed: () async {
-              try {
-                await data.signOut();
-              } catch (_) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not sign out. Try again.'),
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Sign out'),
-          ),
-        ),
-        const Divider(),
-        DropdownButtonFormField<String>(
-          key: ValueKey('${data.currency}-$_currencyVersion'),
-          initialValue: _currencies.contains(data.currency)
-              ? data.currency
-              : 'SAR',
-          items: [
-            for (final c in _currencies)
-              DropdownMenuItem(value: c, child: Text(c)),
-          ],
-          onChanged: profile == null || _savingCurrency
-              ? null
-              : (v) async {
-                  if (v == null) return;
-                  setState(() => _savingCurrency = true);
+        Text('Account', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: ListTile(
+              title: Text(data.accountEmail),
+              trailing: TextButton(
+                onPressed: () async {
                   try {
-                    await data.updateProfile(currency: v);
+                    await data.signOut();
                   } catch (_) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text(
-                            'Could not change currency. Income must fit its precision; no conversion or rounding is performed.',
-                          ),
+                          content: Text('Could not sign out. Try again.'),
                         ),
                       );
                     }
-                  } finally {
-                    if (mounted) {
-                      setState(() {
-                        _savingCurrency = false;
-                        _currencyVersion++;
-                      });
-                    }
                   }
                 },
-          decoration: const InputDecoration(labelText: 'Currency'),
+                child: const Text('Sign out'),
+              ),
+            ),
+          ),
         ),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Monthly income'),
-          subtitle: Text(money(profile?.monthlyIncome ?? 0, data.currency)),
-          trailing: const Icon(Icons.edit_outlined),
-          onTap: profile == null || _savingCurrency
-              ? null
-              : () => _editIncome(context, data),
+        const SizedBox(height: 32),
+        Text('Budget', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              children: [
+                DropdownButtonFormField<String>(
+                  key: ValueKey('${data.currency}-$_currencyVersion'),
+                  initialValue: _currencies.contains(data.currency)
+                      ? data.currency
+                      : 'SAR',
+                  items: [
+                    for (final cur in _currencies)
+                      DropdownMenuItem(value: cur, child: Text(cur)),
+                  ],
+                  onChanged: profile == null || _savingCurrency
+                      ? null
+                      : (v) async {
+                          if (v == null) return;
+                          setState(() => _savingCurrency = true);
+                          try {
+                            await data.updateProfile(currency: v);
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not change currency. Income must fit its precision; no conversion or rounding is performed.',
+                                  ),
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _savingCurrency = false;
+                                _currencyVersion++;
+                              });
+                            }
+                          }
+                        },
+                  decoration: const InputDecoration(labelText: 'Currency'),
+                ),
+                const SizedBox(height: 4),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Monthly income'),
+                  subtitle: Text(
+                    money(profile?.monthlyIncome ?? 0, data.currency),
+                  ),
+                  trailing: const Icon(Icons.edit_outlined),
+                  onTap: profile == null || _savingCurrency
+                      ? null
+                      : () => _editIncome(context, data),
+                ),
+              ],
+            ),
+          ),
         ),
-        const Divider(),
-        Text(
-          'Apple Pay capture',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Apple does not let apps read Wallet history, so use a Shortcuts automation:\n\n'
-          '1. Open Shortcuts > Automation > + > Transaction.\n'
-          '2. Choose your cards, then set "Run Immediately".\n'
-          '   If your iOS version shows "Ask Before Running", turn it off.\n'
-          '3. Capture the transaction date, or Current Date, once when triggered. '
-          'Format it as ISO 8601 with a time zone. Keep that same time if you retry.\n'
-          '4. Add "Get Contents of URL" and use the URL below. Choose POST and JSON body:\n'
-          '   amount = Shortcut Input > Amount\n'
-          '   merchant = Shortcut Input > Merchant\n'
-          '   time = the formatted date from step 3\n'
-          '5. Add the header x-ingest-token with your private token below. '
-          'Do not put it in the URL.\n'
-          '6. Check the result: ok: true means saved; duplicate: true means already saved. '
-          'An error means it was not confirmed. Check your connection, URL and token, '
-          'then retry with the same time. You can also add a payment in Expenses.\n\n'
-          'Field names can vary by iOS version. Check your next payment in Expenses. '
-          'Identical payments at the same place within two minutes are treated as one; '
-          'add a separate payment manually if needed.',
+        const SizedBox(height: 32),
+        Text('Apple Pay capture', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Prose(
+                  'Apple does not let apps read Wallet history, so use a Shortcuts automation:',
+                ),
+                const SizedBox(height: 16),
+                for (var i = 0; i < _steps.length; i++) ...[
+                  _Step(i + 1, _steps[i]),
+                  const SizedBox(height: 14),
+                ],
+                _Prose(
+                  'Field names can vary by iOS version. Check your next payment in Expenses. '
+                  'Identical payments at the same place within two minutes are treated as one; '
+                  'add a separate payment manually if needed.',
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         if (ingestUrl != null)
           _CopyTile(label: 'Ingest URL', value: ingestUrl)
         else
-          const Text('Backend URL unavailable. Check the app configuration.'),
-        if (profile != null)
+          Text(
+            'Backend URL unavailable. Check the app configuration.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
+          ),
+        if (profile != null) ...[
+          const SizedBox(height: 8),
           _CopyTile(
             label: 'Your token (keep private)',
             value: profile.ingestToken,
           ),
+        ],
         if (profile == null) ...[
+          const SizedBox(height: 8),
           Text(
             data.loading
                 ? 'Loading your private token…'
                 : 'Your private token is unavailable. Reload your profile.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
           ),
         ],
-        TextButton(
-          onPressed: data.loading || _regenerating || data.rotatingIngestToken
-              ? null
-              : () async {
-                  await data.refresh();
-                  if (context.mounted && data.error != null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Could not reload your token. Try again.',
-                        ),
-                      ),
-                    );
-                  }
-                },
-          child: Text(data.loading ? 'Loading token…' : 'Reload token'),
-        ),
-        OutlinedButton(
-          onPressed:
-              profile == null || _regenerating || data.rotatingIngestToken
-              ? null
-              : () => _regenerate(data),
-          child: Text(
-            _regenerating || data.rotatingIngestToken
-                ? 'Regenerating…'
-                : 'Regenerate token',
-          ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton(
+              onPressed:
+                  profile == null || _regenerating || data.rotatingIngestToken
+                  ? null
+                  : () => _regenerate(data),
+              child: Text(
+                _regenerating || data.rotatingIngestToken
+                    ? 'Regenerating…'
+                    : 'Regenerate token',
+              ),
+            ),
+            TextButton(
+              onPressed:
+                  data.loading || _regenerating || data.rotatingIngestToken
+                  ? null
+                  : () async {
+                      await data.refresh();
+                      if (context.mounted && data.error != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not reload your token. Try again.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: Text(data.loading ? 'Loading token…' : 'Reload token'),
+            ),
+          ],
         ),
       ],
     );
   }
+
+  static const _steps = [
+    'Open Shortcuts > Automation > + > Transaction.',
+    'Choose your cards, then set "Run Immediately".\n'
+        'If your iOS version shows "Ask Before Running", turn it off.',
+    'Capture the transaction date, or Current Date, once when triggered. '
+        'Format it as ISO 8601 with a time zone. Keep that same time if you retry.',
+    'Add "Get Contents of URL" and use the URL below. Choose POST and JSON body:\n'
+        'amount = Shortcut Input > Amount\n'
+        'merchant = Shortcut Input > Merchant\n'
+        'time = the formatted date from step 3',
+    'Add the header x-ingest-token with your private token below. '
+        'Do not put it in the URL.',
+    'Check the result: ok: true means saved; duplicate: true means already saved. '
+        'An error means it was not confirmed. Check your connection, URL and token, '
+        'then retry with the same time. You can also add a payment in Expenses.',
+  ];
 
   Future<void> _regenerate(AppData data) async {
     if (_regenerating) return;
@@ -297,7 +353,11 @@ class _IncomeDialogState extends State<_IncomeDialog> {
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
         ),
-        if (_error != null) Text(_error!),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_error!, style: TextStyle(color: context.mc.negative)),
+          ),
       ],
     ),
     actions: [
@@ -313,34 +373,108 @@ class _IncomeDialogState extends State<_IncomeDialog> {
   );
 }
 
+class _Prose extends StatelessWidget {
+  const _Prose(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: context.mc.muted, height: 1.6),
+  );
+}
+
+class _Step extends StatelessWidget {
+  const _Step(this.number, this.text);
+  final int number;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.mc;
+    final lines = text.split('\n');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 28,
+          child: Text('$number.', style: theme.textTheme.titleSmall),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < lines.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 4),
+                  child: Text(
+                    lines[i],
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: c.muted,
+                      height: 1.6,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CopyTile extends StatelessWidget {
   const _CopyTile({required this.label, required this.value});
   final String label;
   final String value;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    title: Text(label),
-    subtitle: SelectableText(value),
-    trailing: IconButton(
-      icon: const Icon(Icons.copy),
-      tooltip: 'Copy $label',
-      onPressed: () async {
-        try {
-          await Clipboard.setData(ClipboardData(text: value));
-          if (context.mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Copied')));
-          }
-        } catch (_) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not copy. Try again.')),
-            );
-          }
-        }
-      },
-    ),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.mc;
+    return Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(18, 12, 6, 12),
+      decoration: BoxDecoration(
+        color: c.well,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.bodySmall),
+                const SizedBox(height: 4),
+                SelectableText(value, style: theme.textTheme.bodyMedium),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy),
+            tooltip: 'Copy $label',
+            onPressed: () async {
+              try {
+                await Clipboard.setData(ClipboardData(text: value));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Copied')));
+                }
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not copy. Try again.')),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }

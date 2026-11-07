@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../theme.dart';
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.auth});
 
@@ -66,28 +68,28 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.mc;
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsetsDirectional.fromSTEB(28, 24, 28, 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'مصاريفي',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.displaySmall,
-                  ),
+                  Text('مصاريفي', style: theme.textTheme.displayMedium),
+                  const SizedBox(height: 10),
                   Text(
                     'Masarifi',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: c.muted,
+                    ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 48),
                   TextField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
@@ -106,24 +108,28 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 12),
                     Text(
                       _message!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: c.negative,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   FilledButton(
                     onPressed: _busy ? null : _submit,
                     child: Text(_signUp ? 'Create account' : 'Sign in'),
                   ),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _signUp = !_signUp),
-                    child: Text(
-                      _signUp
-                          ? 'Have an account? Sign in'
-                          : 'New here? Create an account',
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _signUp = !_signUp),
+                      child: Text(
+                        _signUp
+                            ? 'Have an account? Sign in'
+                            : 'New here? Create an account',
+                      ),
                     ),
                   ),
                 ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data.dart';
+import '../theme.dart';
 
 /// Amount entry needs the owner's currency, including after a failed first load.
 class ProfileRequired extends StatelessWidget {
@@ -18,12 +19,23 @@ class ProfileRequired extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               data.loading ? 'Loading your profile and currency…' : 'Load your profile and currency before adding a payment or plan.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             if (data.error != null)
-              const Text('Could not load your profile. Try again.'),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Could not load your profile. Try again.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: context.mc.negative),
+                ),
+              ),
+            const SizedBox(height: 8),
             TextButton(
               onPressed: data.loading ? null : data.refresh,
               child: const Text('Reload profile'),

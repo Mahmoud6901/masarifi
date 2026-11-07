@@ -5,6 +5,7 @@ import '../data.dart';
 import '../format.dart';
 import '../logic.dart';
 import '../models.dart';
+import '../theme.dart';
 import 'profile_required.dart';
 
 class InstallmentsScreen extends StatelessWidget {
@@ -20,6 +21,8 @@ class InstallmentsScreen extends StatelessWidget {
         return right == null ? -1 : left.compareTo(right);
       });
     final currencies = active.map((p) => p.currency).toSet().toList()..sort();
+    final theme = Theme.of(context);
+    final c = context.mc;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _form(context, data),
@@ -30,22 +33,52 @@ class InstallmentsScreen extends StatelessWidget {
         onRefresh: data.refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 100),
           children: [
-            if (data.error != null) Text(data.error!),
-            if (data.loading) const LinearProgressIndicator(),
-            for (final currency in currencies)
-              Text(
-                'Remaining to pay: ${money(totalRemainingInstallments(data.plans, currency: currency), currency)}',
+            if (data.error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  data.error!,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: c.negative),
+                ),
               ),
-            const SizedBox(height: 12),
-            const Text(
+            if (data.loading)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+            if (currencies.isNotEmpty)
+              Text('Remaining to pay', style: theme.textTheme.bodySmall),
+            for (final currency in currencies) ...[
+              const SizedBox(height: 6),
+              Text(
+                money(
+                  totalRemainingInstallments(data.plans, currency: currency),
+                  currency,
+                ),
+                style: theme.textTheme.headlineMedium,
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(
               'Mark paid updates the plan only. Capture the cash payment or add it in Expenses so spending reflects it.',
+              style: theme.textTheme.bodySmall,
             ),
-            if (active.isEmpty) const Text('No active installment plans.'),
-            for (final p in active) _card(context, data, p),
-            for (final p in data.plans.where((p) => !p.active || p.isFinished))
+            const SizedBox(height: 24),
+            if (active.isEmpty)
+              Text(
+                'No active installment plans.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
+              ),
+            for (final p in active) ...[
               _card(context, data, p),
+              const SizedBox(height: 12),
+            ],
+            for (final p in data.plans.where((p) => !p.active || p.isFinished)) ...[
+              _card(context, data, p),
+              const SizedBox(height: 12),
+            ],
           ],
         ),
       ),
@@ -53,6 +86,8 @@ class InstallmentsScreen extends StatelessWidget {
   }
 
   Widget _card(BuildContext context, AppData data, InstallmentPlan p) {
+    final theme = Theme.of(context);
+    final c = context.mc;
     final date = nextDueDate(p);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -65,31 +100,113 @@ class InstallmentsScreen extends StatelessWidget {
         : date == null
         ? 'Schedule needed · one provisional monthly reserve'
         : '${date.isBefore(today) ? 'Overdue' : 'Next unpaid'}: ${dayMonth(date)}';
+    // Overdue, unscheduled, or due within a week reads as the one warm signal.
+    final soon = live && (date == null || date.difference(today).inDays <= 7);
+    final subtitle = p.provider.isEmpty ? p.kind : '${p.provider} · ${p.kind}';
+    final progress = p.totalCount <= 0
+        ? 0.0
+        : (p.paidCount / p.totalCount).clamp(0.0, 1.0);
     return Card(
       key: ValueKey(p.id),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '${p.name}${p.provider.isEmpty ? '' : ' · ${p.provider}'}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Text(
-              '${money(p.monthlyAmount, p.currency)} / month · ${p.remainingCount} left',
-            ),
-            Text('Remaining: ${money(p.remainingBalance, p.currency)}'),
-            Text(status),
-            if (busy) const LinearProgressIndicator(),
-            Wrap(
-              spacing: 8,
+            Text(p.name, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 2),
+            Text(subtitle, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                if (live && date != null)
-                  FilledButton.tonal(
-                    onPressed: busy ? null : () => _pay(context, data, p),
-                    child: Text('Mark ${dayMonth(date)} paid'),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: money(p.monthlyAmount, p.currency),
+                          style: theme.textTheme.titleLarge,
+                        ),
+                        TextSpan(
+                          text: ' / month',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
+                ),
+                Text(
+                  '${p.remainingCount} left',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(
+                height: 4,
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: ColoredBox(color: c.well)),
+                    Positioned.fill(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: FractionallySizedBox(
+                          widthFactor: progress,
+                          heightFactor: 1,
+                          child: ColoredBox(color: c.ink),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Remaining: ${money(p.remainingBalance, p.currency)}',
+                  style: theme.textTheme.bodySmall,
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.well,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    status,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: soon ? c.warm : c.muted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+            const SizedBox(height: 12),
+            if (live && date != null)
+              FilledButton(
+                onPressed: busy ? null : () => _pay(context, data, p),
+                child: Text('Mark ${dayMonth(date)} paid'),
+              ),
+            if (live && date != null) const SizedBox(height: 4),
+            Row(
+              children: [
                 if (live)
                   TextButton(
                     onPressed: busy
@@ -270,14 +387,17 @@ class _PlanFormState extends State<_PlanForm> {
   }
 
   Widget _field(TextEditingController c, String label, {bool number = false}) =>
-      TextField(
-        controller: c,
-        enabled: !_busy,
-        onChanged: (_) => setState(() {}),
-        keyboardType: number
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        decoration: InputDecoration(labelText: label),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: c,
+          enabled: !_busy,
+          onChanged: (_) => setState(() {}),
+          keyboardType: number
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.text,
+          decoration: InputDecoration(labelText: label),
+        ),
       );
   @override
   Widget build(BuildContext context) {
@@ -288,18 +408,25 @@ class _PlanFormState extends State<_PlanForm> {
         : null;
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        16 + MediaQuery.of(context).viewInsets.bottom,
+        20,
+        8,
+        20,
+        24 + MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            widget.plan == null
-                ? 'Add installment plan (${widget.data.currency})'
-                : 'Confirm earliest unpaid payment',
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                widget.plan == null
+                    ? 'Add installment plan (${widget.data.currency})'
+                    : 'Confirm earliest unpaid payment',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
           ),
           if (widget.plan == null) ...[
             _field(_name, 'What is it for?'),
@@ -315,20 +442,29 @@ class _PlanFormState extends State<_PlanForm> {
                   : (v) => setState(() => _kind = v ?? 'other'),
               decoration: const InputDecoration(labelText: 'Type'),
             ),
+            const SizedBox(height: 12),
             _field(_monthly, 'Monthly amount', number: true),
             _field(_count, 'Total number of payments', number: true),
             _field(_paid, 'Already paid', number: true),
           ],
           _field(_day, 'Due day of month (1–31)', number: true),
           _field(_month, 'Next unpaid month (YYYY-MM)'),
-          const Text(
+          Text(
             'Choose the earliest unpaid month, even if overdue. Short months use their last day. Completed plans need no next month.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (preview != null) Text('Next unpaid: ${dayMonth(preview)}'),
+          if (preview != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Next unpaid: ${dayMonth(preview)}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
           if (_error != null)
             Text(
               _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              style: TextStyle(color: context.mc.negative),
             ),
           const SizedBox(height: 12),
           FilledButton(
