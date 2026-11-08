@@ -184,3 +184,17 @@ Deno.test("a Wallet Dictionary forwarded as text is saved as an Apple Pay paymen
   await createIngestHandler({ backend: fake.implementation, readSms: sms.read })(post({ text: "{not json شراء 10 SR", time: instant }));
   if (sms.calls.length !== 1) throw new Error("Brace-led SMS text must still be read as SMS");
 });
+
+Deno.test("an SMS sent as a Message object or a list is still read as an SMS", async () => {
+  for (const text of [
+    { Sender: "AlRajhiBank", Content: RAJHI_ONLINE },
+    { "Message Contents": RAJHI_ONLINE },
+    [RAJHI_ONLINE],
+  ]) {
+    const fake = fakeBackend();
+    const sms = reader({ kind: "purchase", amount: "10", currency: "SAR", merchant: "Hungerstation", last4: "1226" });
+    const response = await createIngestHandler({ backend: fake.implementation, readSms: sms.read })(post({ text, time: instant }));
+    if (response.status !== 200 || fake.records[0]?.p_source !== "sms") throw new Error(`Expected an SMS save for ${JSON.stringify(text)}`);
+    if (sms.calls[0] !== RAJHI_ONLINE) throw new Error("The reader must get the message content only");
+  }
+});

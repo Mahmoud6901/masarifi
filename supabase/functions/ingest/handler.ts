@@ -288,6 +288,41 @@ export function walletDictionary(text: unknown): Record<string, unknown> | null 
   return "amount" in fields || "merchant" in fields ? fields : null;
 }
 
+const SMS_TEXT_KEYS = ["content", "body", "text", "message", "messagecontent", "messagecontents"];
+
+/**
+ * The SMS can arrive as plain text, or, depending on iOS, as a Message object
+ * or a list. Prefer a content-like field; otherwise join the string values.
+ */
+export function smsTextOf(value: unknown, depth = 0): string {
+  if (typeof value === "string") return value.trim();
+  if (depth > 3) return "";
+  if (Array.isArray(value)) {
+    return value.map((item) => smsTextOf(item, depth + 1)).filter(Boolean).join("\n").trim();
+  }
+  if (!validPayload(value)) return "";
+  const fields = Object.entries(value).map(([key, field]) => [key.toLowerCase().replace(/[^a-z]/g, ""), field] as const);
+  for (const wanted of SMS_TEXT_KEYS) {
+    const hit = fields.find(([key]) => key === wanted);
+    const text = hit ? smsTextOf(hit[1], depth + 1) : "";
+    if (text) return text;
+  }
+  return fields.map(([, field]) => (typeof field === "string" ? field.trim() : "")).filter(Boolean).join("\n");
+}
+
+/** Type and field names only: never the values, which hold the SMS or amounts. */
+function payloadShape(body: Record<string, unknown>): string {
+  const describe = (value: unknown): string =>
+    Array.isArray(value)
+      ? `array(${value.length})`
+      : validPayload(value)
+        ? `object{${Object.keys(value).slice(0, 12).join(",")}}`
+        : typeof value === "string"
+          ? `string(${value.length})`
+          : typeof value;
+  return Object.keys(body).slice(0, 12).map((key) => `${key}:${describe(body[key])}`).join(" ");
+}
+
 function optionalText(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.replace(/\s+/g, " ").trim();
@@ -346,7 +381,7 @@ export function createIngestHandler({ backend, now = () => new Date(), readSms, 
     };
     const walletAmount = parsePaymentAmount(body.amount, profile.currency, body.currency);
     const walletMerchant = typeof body.merchant === "string" ? body.merchant.trim() : "";
-    const smsText = typeof body.text === "string" ? body.text.trim() : "";
+    const smsText = smsTextOf(body.text);
     // The Message automation sends the SMS as text with empty Wallet fields;
     // the Wallet automation sends amount and merchant.
     const isSms = smsText !== "" && (walletAmount === null || !walletMerchant);
@@ -389,7 +424,10 @@ export function createIngestHandler({ backend, now = () => new Date(), readSms, 
         p_last4: grounded.last4 ?? null,
       };
     } else {
-      if (walletAmount === null) return reject("amount", body.amount);
+      if (walletAmount === null) {
+        console.warn(JSON.stringify({ ingest_payload_shape: payloadShape(body) }));
+        return reject("amount", body.amount);
+      }
       if (!walletMerchant || [...walletMerchant].length > 200) return reject("merchant", typeof body.merchant);
       const spentAt = parseEventTime(body.time, now);
       if (!spentAt) return reject("time", body.time);
