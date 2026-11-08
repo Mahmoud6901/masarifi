@@ -268,6 +268,26 @@ function validPayload(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * iOS offers Amount, Merchant and Card only inside the Wallet automation, so it
+ * hands Masarifi a Dictionary. The Shortcut forwards its input as `text`,
+ * which then arrives as a nested object or as JSON text. Keys ignore case.
+ */
+export function walletDictionary(text: unknown): Record<string, unknown> | null {
+  let value = text;
+  if (typeof value === "string" && value.trim().startsWith("{")) {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!validPayload(value)) return null;
+  const fields: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) fields[key.trim().toLowerCase()] = field;
+  return "amount" in fields || "merchant" in fields ? fields : null;
+}
+
 function optionalText(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.replace(/\s+/g, " ").trim();
@@ -307,6 +327,9 @@ export function createIngestHandler({ backend, now = () => new Date(), readSms, 
     } catch {
       return json({ error: "invalid_json" }, 400);
     }
+    if (!validPayload(body)) return json({ error: "invalid_payload" }, 400);
+    const forwarded = walletDictionary(body.text);
+    if (forwarded) body = { ...body, ...forwarded, text: "" };
     if (!validPayload(body)) return json({ error: "invalid_payload" }, 400);
 
     // Name the failing field so a Shortcut's notification says what to fix.

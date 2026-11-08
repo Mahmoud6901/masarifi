@@ -164,3 +164,23 @@ Deno.test("GET /shortcut hands out only a valid iCloud Shortcut link", async () 
   if (other.status !== 405) throw new Error("Other GETs stay 405");
   if (fake.records.length !== 0) throw new Error("GET must never write");
 });
+
+Deno.test("a Wallet Dictionary forwarded as text is saved as an Apple Pay payment", async () => {
+  for (const text of [
+    { Amount: "⃁10.50", Merchant: "HungerStation", Card: "Cashback Signature" },
+    JSON.stringify({ amount: "SAR 10.50", merchant: "HungerStation", card: "Cashback Signature" }),
+  ]) {
+    const fake = fakeBackend();
+    const sms = reader({ kind: "ignore" });
+    const response = await createIngestHandler({ backend: fake.implementation, readSms: sms.read })(post({ text, time: instant }));
+    const record = fake.records[0];
+    if (response.status !== 200 || !record) throw new Error(`Expected a save, got ${response.status}`);
+    if (record.p_source !== "apple_pay" || record.p_amount !== 10.5 || record.p_merchant !== "HungerStation") throw new Error(JSON.stringify(record));
+    if (record.p_wallet_name !== "Cashback Signature") throw new Error("Card name lost");
+    if (sms.calls.length !== 0) throw new Error("A Wallet dictionary must never reach the SMS reader");
+  }
+  const fake = fakeBackend();
+  const sms = reader({ kind: "ignore" });
+  await createIngestHandler({ backend: fake.implementation, readSms: sms.read })(post({ text: "{not json شراء 10 SR", time: instant }));
+  if (sms.calls.length !== 1) throw new Error("Brace-led SMS text must still be read as SMS");
+});
