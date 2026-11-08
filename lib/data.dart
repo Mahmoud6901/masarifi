@@ -42,6 +42,17 @@ class AppData extends ChangeNotifier {
   Profile? profile;
   List<Expense> expenses = [];
   List<InstallmentPlan> plans = [];
+
+  /// Cards created automatically by Apple Pay taps and bank SMS.
+  List<PaymentCard> cards = [];
+  PaymentCard? cardFor(String? id) {
+    if (id == null) return null;
+    for (final c in cards) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
   bool loading = false;
   bool rotatingIngestToken = false;
   String? error;
@@ -63,6 +74,7 @@ class AppData extends ChangeNotifier {
     profile = null;
     expenses = [];
     plans = [];
+    cards = [];
     _budgetSnapshot = null;
     budgetAsOf = null;
     budgetStale = true;
@@ -183,6 +195,22 @@ class AppData extends ChangeNotifier {
           throw StateError('Incomplete expense page.');
         }
       }
+      // Cards are a nice-to-have label; a failure here never blocks the budget.
+      List<PaymentCard>? cardResults;
+      try {
+        final c = await _db
+            .from('cards')
+            .select('id,wallet_name,bank,last4,nickname')
+            .eq('user_id', userId)
+            .order('created_at', ascending: true)
+            .limit(200)
+            // Labels only: fail fast; the next refresh tries again.
+            .retry(enabled: false);
+        cardResults = c.map(PaymentCard.fromJson).toList();
+      } catch (_) {
+        cardResults = null;
+      }
+      if (!isCurrent()) return;
       final expenseResults = e.map(Expense.fromJson).toList();
       final planResults = planRows.map(InstallmentPlan.fromJson).toList();
       final summary = computeBudget(
@@ -195,6 +223,7 @@ class AppData extends ChangeNotifier {
       profile = profileResult;
       expenses = expenseResults;
       plans = planResults;
+      if (cardResults != null) cards = cardResults;
       _budgetSnapshot = summary;
       budgetAsOf = snapshotTime;
       budgetStale = false;
@@ -254,6 +283,54 @@ class AppData extends ChangeNotifier {
     expenses = expenses.where((e) => e.id != id).toList();
     _publishMutation();
     await refresh();
+  }
+
+  /// The shared iCloud link of the capture Shortcut, or null when not set up.
+  Future<Uri?> shortcutLink() async {
+    try {
+      final res = await _db.functions.invoke(
+        'ingest/shortcut',
+        method: HttpMethod.get,
+      );
+      final url = res.data is Map ? (res.data as Map)['url'] : null;
+      final uri = url is String ? Uri.tryParse(url) : null;
+      return uri != null &&
+              uri.scheme == 'https' &&
+              uri.host == 'www.icloud.com' &&
+              uri.path.startsWith('/shortcuts/')
+          ? uri
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Gives a card a friendly name. An empty name restores the automatic one.
+  Future<void> renameCard(String id, String nickname) async {
+    final userId = _requireUser();
+    final name = nickname.trim();
+    if (name.runes.length > 60) {
+      throw ArgumentError('Use a card name of up to 60 characters.');
+    }
+    await _db
+        .from('cards')
+        .update({'nickname': name.isEmpty ? null : name})
+        .eq('id', id)
+        .eq('user_id', userId);
+    _requireUser();
+    cards = [
+      for (final c in cards)
+        c.id == id
+            ? PaymentCard(
+                id: c.id,
+                walletName: c.walletName,
+                bank: c.bank,
+                last4: c.last4,
+                nickname: name.isEmpty ? null : name,
+              )
+            : c,
+    ];
+    notifyListeners();
   }
 
   Future<String> rotateIngestToken() async {

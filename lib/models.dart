@@ -9,6 +9,8 @@ class Expense {
     required this.source,
     required this.spentAt,
     this.currency = 'SAR',
+    this.refundedAmount = 0,
+    this.cardId,
   });
 
   final String id;
@@ -19,6 +21,19 @@ class Expense {
   final DateTime spentAt;
   final String currency;
 
+  /// Money the bank returned for this purchase (bank SMS refunds).
+  final double refundedAmount;
+  final String? cardId;
+
+  bool get isRefunded => refundedAmount > 0;
+  bool get isFullyRefunded => refundedAmount > 0 && refundedAmount >= amount;
+
+  /// What the purchase really cost after refunds, in exact minor units.
+  double get netAmount => moneyFromUnits(
+    moneyUnits(amount, currency) - moneyUnits(refundedAmount, currency),
+    currency,
+  );
+
   factory Expense.fromJson(Map<String, dynamic> j) => Expense(
     id: j['id'] as String,
     amount: (j['amount'] as num).toDouble(),
@@ -27,6 +42,46 @@ class Expense {
     source: j['source'] as String,
     spentAt: DateTime.parse(j['spent_at'] as String).toLocal(),
     currency: j['currency'] as String,
+    refundedAmount: (j['refunded_amount'] as num?)?.toDouble() ?? 0,
+    cardId: j['card_id'] as String?,
+  );
+}
+
+/// A payment card, created automatically from Wallet taps and bank SMS.
+class PaymentCard {
+  PaymentCard({
+    required this.id,
+    this.walletName,
+    this.bank,
+    this.last4,
+    this.nickname,
+  });
+
+  final String id;
+  final String? walletName;
+  final String? bank;
+  final String? last4;
+  final String? nickname;
+
+  /// Nickname first, then Wallet's name, then "Bank ··1234".
+  String get displayName {
+    if (nickname case final n? when n.trim().isNotEmpty) return n;
+    final digits = last4 == null ? '' : '··$last4';
+    if (walletName case final w? when w.trim().isNotEmpty) {
+      return digits.isEmpty ? w : '$w $digits';
+    }
+    return [
+      bank,
+      digits,
+    ].whereType<String>().where((s) => s.isNotEmpty).join(' ');
+  }
+
+  factory PaymentCard.fromJson(Map<String, dynamic> j) => PaymentCard(
+    id: j['id'] as String,
+    walletName: j['wallet_name'] as String?,
+    bank: j['bank'] as String?,
+    last4: j['last4'] as String?,
+    nickname: j['nickname'] as String?,
   );
 }
 

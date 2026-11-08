@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data.dart';
 import '../logic.dart';
 import '../format.dart';
+import '../models.dart';
 import '../theme.dart';
+
+/// A prompt the user pastes into Siri or Shortcuts to build the capture
+/// Shortcut. It carries the private token, so it is copied, never shown.
+String siriPrompt(String ingestUrl, String token) =>
+    'Create a shortcut named "Masarifi" that receives any input. '
+    'Add "Get Contents of URL" with URL $ingestUrl, method POST, '
+    'header x-ingest-token = $token, and a JSON body: '
+    'amount = Shortcut Input Amount, merchant = Shortcut Input Merchant, '
+    'card = Shortcut Input Card, text = Shortcut Input as text, '
+    'sender = Shortcut Input Sender, time = Current Date formatted as ISO 8601. '
+    'Then show a notification with the Contents of URL.';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -21,6 +34,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _regenerating = false;
+  bool _openingShortcut = false;
   bool _savingCurrency = false;
   int _currencyVersion = 0;
 
@@ -133,7 +147,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 32),
-        Text('Apple Pay capture', style: theme.textTheme.headlineSmall),
+        Text('Cards', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: data.cards.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: _Prose(
+                      'Your cards appear here by themselves after your first '
+                      'Apple Pay tap or bank SMS.',
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (final card in data.cards)
+                        ListTile(
+                          leading: const Icon(Icons.credit_card),
+                          title: Text(card.displayName),
+                          subtitle: card.nickname == null
+                              ? null
+                              : Text(
+                                  [
+                                    card.walletName ?? card.bank,
+                                    if (card.last4 != null) '··${card.last4}',
+                                  ].whereType<String>().join(' '),
+                                ),
+                          trailing: IconButton(
+                            tooltip: 'Rename card',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => _renameCard(context, data, card),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 32),
+        Text('Payment capture', style: theme.textTheme.headlineSmall),
         const SizedBox(height: 12),
         Card(
           child: Padding(
@@ -142,17 +194,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Prose(
-                  'Apple does not let apps read Wallet history, so use a Shortcuts automation:',
+                  'One Shortcut saves Apple Pay taps and bank SMS from every card. '
+                  'New cards are added for you, and bank refunds are matched to '
+                  'the original payment.',
                 ),
                 const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: profile == null || _openingShortcut
+                          ? null
+                          : () => _addShortcut(data, profile.ingestToken),
+                      icon: const Icon(Icons.bolt),
+                      label: Text(
+                        _openingShortcut ? 'Opening…' : 'Add the Shortcut',
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: profile == null || ingestUrl == null
+                          ? null
+                          : () => _copy(
+                              context,
+                              siriPrompt(ingestUrl, profile.ingestToken),
+                              'Prompt copied. It contains your private token.',
+                            ),
+                      icon: const Icon(Icons.mic_none),
+                      label: const Text('Copy Siri prompt'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
                 for (var i = 0; i < _steps.length; i++) ...[
                   _Step(i + 1, _steps[i]),
                   const SizedBox(height: 14),
                 ],
                 _Prose(
-                  'Field names can vary by iOS version. Check your next payment in Expenses. '
-                  'Identical payments at the same place within two minutes are treated as one; '
-                  'add a separate payment manually if needed.',
+                  'A payment seen by both Apple Pay and SMS is saved once. '
+                  'Check your next payment in Expenses.',
                 ),
               ],
             ),
@@ -224,21 +304,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   static const _steps = [
-    'Open Shortcuts > Automation > + > Transaction.',
-    'Choose your cards, then set "Run Immediately".\n'
-        'If your iOS version shows "Ask Before Running", turn it off.',
-    'Capture the transaction date, or Current Date, once when triggered. '
-        'Format it as ISO 8601 with a time zone. Keep that same time if you retry.',
-    'Add "Get Contents of URL" and use the URL below. Choose POST and JSON body:\n'
-        'amount = Shortcut Input > Amount\n'
-        'merchant = Shortcut Input > Merchant\n'
-        'time = the formatted date from step 3',
-    'Add the header x-ingest-token with your private token below. '
-        'Do not put it in the URL.',
-    'Check the result: ok: true means saved; duplicate: true means already saved. '
-        'An error means it was not confirmed. Check your connection, URL and token, '
-        'then retry with the same time. You can also add a payment in Expenses.',
+    'Tap "Add the Shortcut". Your token is copied first; paste it when '
+        'Shortcuts asks for it.',
+    'In Shortcuts > Automation > + > Wallet, choose Any Card, then '
+        '"Run Immediately" and pick Masarifi.',
+    'Add > Message, set "Message Contains" to شراء, then "Run Immediately" '
+        'and pick Masarifi.\n'
+        'Repeat for Purchase, استرداد and Refund so refunds are caught too.',
+    'No link yet? Tap "Copy Siri prompt" and paste it into Siri or the '
+        'Shortcuts app to build the same Shortcut.',
   ];
+
+  Future<void> _copy(BuildContext context, String text, String done) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(done)));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not copy. Try again.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _addShortcut(AppData data, String token) async {
+    setState(() => _openingShortcut = true);
+    try {
+      // The Shortcut asks for the token on import; have it ready to paste.
+      await Clipboard.setData(ClipboardData(text: token));
+      final link = await data.shortcutLink();
+      final opened =
+          link != null &&
+          await launchUrl(link, mode: LaunchMode.externalApplication);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            opened
+                ? 'Token copied. Paste it when Shortcuts asks.'
+                : 'The Shortcut link is not ready yet. Use "Copy Siri prompt".',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open Shortcuts. Try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingShortcut = false);
+    }
+  }
+
+  Future<void> _renameCard(
+    BuildContext context,
+    AppData data,
+    PaymentCard card,
+  ) async {
+    final controller = TextEditingController(text: card.nickname ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Card name'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 60,
+          decoration: InputDecoration(hintText: card.displayName),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null) return;
+    try {
+      await data.renameCard(card.id, name);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not rename. Try again.')),
+        );
+      }
+    }
+  }
 
   Future<void> _regenerate(AppData data) async {
     if (_regenerating) return;
@@ -380,9 +542,8 @@ class _Prose extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: Theme.of(
-      context,
-    ).textTheme.bodyMedium?.copyWith(color: context.mc.muted, height: 1.6),
+    style: Theme.of(context).textTheme.bodyMedium
+        ?.copyWith(color: context.mc.muted, height: 1.6),
   );
 }
 
@@ -460,9 +621,8 @@ class _CopyTile extends StatelessWidget {
               try {
                 await Clipboard.setData(ClipboardData(text: value));
                 if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('Copied')));
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(const SnackBar(content: Text('Copied')));
                 }
               } catch (_) {
                 if (context.mounted) {

@@ -692,11 +692,17 @@ function normalizeExpense(raw: unknown): {
   if (!isObject(raw)) fail("invalid_expense", MESSAGES.expense);
   const currency = raw.currency;
   if (!isCurrencyCode(currency)) fail("invalid_expense", MESSAGES.expense);
-  const units = must(
+  const charged = must(
     moneyUnits(raw.amount, currency, false),
     "invalid_expense",
     MESSAGES.expense,
   );
+  // Refunds (migration 005) reduce what the purchase really cost.
+  const refunded = raw.refunded_amount === undefined || raw.refunded_amount === null
+    ? 0n
+    : must(moneyUnits(raw.refunded_amount, currency, false), "invalid_expense", MESSAGES.expense);
+  if (refunded > charged) fail("invalid_expense", MESSAGES.expense);
+  const units = charged - refunded;
   const spentText = raw.spent_at;
   if (typeof spentText !== "string") fail("invalid_expense", MESSAGES.expense);
   const spentAt = must(

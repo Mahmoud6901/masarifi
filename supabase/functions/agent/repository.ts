@@ -114,7 +114,7 @@ export function createReadRepository(
   function expensesQuery() {
     return db
       .from("expenses")
-      .select("id,user_id,amount,currency,merchant,category,spent_at", {
+      .select("id,user_id,amount,refunded_amount,currency,merchant,category,spent_at", {
         count: "exact",
       })
       .eq("user_id", owner)

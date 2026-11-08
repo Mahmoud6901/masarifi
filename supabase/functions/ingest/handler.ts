@@ -1,6 +1,9 @@
-// Receives Apple Pay payments from an iOS Shortcuts automation.
-// POST { amount, merchant, time? } with x-ingest-token: <personal token>.
+// Receives payments from the one Masarifi Shortcut, run by two automations:
+//   Wallet tap:  POST { amount, merchant, card?, time? }
+//   Bank SMS:    POST { text, sender?, time? }   (read by the SMS reader)
+// with header x-ingest-token: <personal token>.
 import { createHash, timingSafeEqual } from "node:crypto";
+import { groundSmsReading, prefilterSms, SMS_MAX_LENGTH, type SmsReader } from "./sms.ts";
 
 export const TOKEN_PATTERN = /^[a-f0-9]{48}$/;
 export const MAX_AMOUNT = 99_999_999_999.999;
@@ -199,24 +202,43 @@ export interface IngestProfile {
   currency: string;
 }
 
+/** Arguments of the capture_payment RPC (migration 005). */
 export interface RecordApplePayArgs {
   p_user_id: string;
   p_token_hash: string;
+  p_kind: "purchase" | "refund";
+  p_source: "apple_pay" | "sms";
   p_amount: number;
-  p_merchant: string;
+  p_merchant: string | null;
   p_spent_at: string;
-  p_category: ExpenseCategory;
+  p_category: ExpenseCategory | null;
   p_currency: string;
+  p_wallet_name: string | null;
+  p_bank: string | null;
+  p_last4: string | null;
 }
 
 export interface IngestBackend {
   findProfileByTokenHash(hash: string): Promise<{ profile: IngestProfile | null; error?: unknown }>;
+  /** Records a purchase or refund through capture_payment. */
   recordApplePay(args: RecordApplePayArgs): Promise<{ result: unknown; error?: unknown }>;
 }
 
 export interface HandlerOptions {
   backend: IngestBackend;
   now?: () => Date;
+  /** Reads bank SMS; absent when no ANTHROPIC_API_KEY is configured. */
+  readSms?: SmsReader;
+  /** The shared iCloud link of the capture Shortcut (SHORTCUT_URL secret). */
+  shortcutUrl?: string;
+}
+
+const SHORTCUT_LINK = /^https:\/\/www\.icloud\.com\/shortcuts\/[0-9a-f]{32}$/;
+
+/** Only a real iCloud Shortcuts link is ever handed to the app. */
+export function validShortcutUrl(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return SHORTCUT_LINK.test(trimmed) ? trimmed : null;
 }
 
 const json = (body: unknown, status = 200) =>
@@ -246,8 +268,19 @@ function validPayload(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function createIngestHandler({ backend, now = () => new Date() }: HandlerOptions) {
+function optionalText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  return trimmed && [...trimmed].length <= max ? trimmed : null;
+}
+
+export function createIngestHandler({ backend, now = () => new Date(), readSms, shortcutUrl }: HandlerOptions) {
+  const shortcut = validShortcutUrl(shortcutUrl);
   return async (request: Request): Promise<Response> => {
+    if (request.method === "GET" && new URL(request.url).pathname.endsWith("/shortcut")) {
+      // Public: the link only installs the Shortcut; the private token is asked on import.
+      return shortcut ? json({ url: shortcut }) : json({ error: "shortcut_not_configured" }, 404);
+    }
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
     const token = request.headers.get("x-ingest-token");
@@ -288,22 +321,70 @@ export function createIngestHandler({ backend, now = () => new Date() }: Handler
       console.warn(JSON.stringify({ ingest_rejected: field, shape }));
       return json({ error: "invalid_payload", field }, 400);
     };
-    const payment = parsePaymentAmount(body.amount, profile.currency, body.currency);
-    if (payment === null) return reject("amount", body.amount);
-    const merchant = typeof body.merchant === "string" ? body.merchant.trim() : "";
-    if (!merchant || [...merchant].length > 200) return reject("merchant", typeof body.merchant);
-    const spentAt = parseEventTime(body.time, now);
-    if (!spentAt) return reject("time", body.time);
+    const walletAmount = parsePaymentAmount(body.amount, profile.currency, body.currency);
+    const walletMerchant = typeof body.merchant === "string" ? body.merchant.trim() : "";
+    const smsText = typeof body.text === "string" ? body.text.trim() : "";
+    // The Message automation sends the SMS as text with empty Wallet fields;
+    // the Wallet automation sends amount and merchant.
+    const isSms = smsText !== "" && (walletAmount === null || !walletMerchant);
 
-    const args: RecordApplePayArgs = {
-      p_user_id: profile.id,
-      p_token_hash: tokenDigest(token),
-      p_amount: payment.amount,
-      p_merchant: merchant,
-      p_spent_at: spentAt,
-      p_category: categorize(merchant),
-      p_currency: payment.currency,
-    };
+    let args: RecordApplePayArgs;
+    if (isSms) {
+      if ([...smsText].length > SMS_MAX_LENGTH) return reject("text", "too_long");
+      const spentAt = parseEventTime(body.time, now);
+      if (!spentAt) return reject("time", body.time);
+      const skipped = prefilterSms(smsText);
+      if (skipped) return json({ ok: true, ignored: skipped });
+      if (!readSms) return json({ error: "sms_reader_unavailable" }, 503);
+      let reading;
+      try {
+        reading = await readSms(smsText, optionalText(body.sender, 60) ?? "");
+      } catch {
+        return json({ error: "sms_reader_failed" }, 502);
+      }
+      if (reading.kind === "ignore") return json({ ok: true, ignored: reading.reason ?? "not_a_payment" });
+      const grounded = groundSmsReading(smsText, reading);
+      if (!grounded) {
+        console.warn(JSON.stringify({ sms_unverified: reading.kind }));
+        return json({ ok: true, ignored: "amount_not_in_sms" });
+      }
+      const payment = parsePaymentAmount(grounded.amount, profile.currency, grounded.currency);
+      if (payment === null) return json({ ok: true, ignored: "unsupported_amount" });
+      const merchant = grounded.kind === "purchase" ? grounded.merchant || "Card purchase" : grounded.merchant || null;
+      args = {
+        p_user_id: profile.id,
+        p_token_hash: tokenDigest(token),
+        p_kind: grounded.kind,
+        p_source: "sms",
+        p_amount: payment.amount,
+        p_merchant: merchant,
+        p_spent_at: spentAt,
+        p_category: grounded.kind === "purchase" ? categorize(merchant ?? "") : null,
+        p_currency: payment.currency,
+        p_wallet_name: null,
+        p_bank: grounded.bank ?? null,
+        p_last4: grounded.last4 ?? null,
+      };
+    } else {
+      if (walletAmount === null) return reject("amount", body.amount);
+      if (!walletMerchant || [...walletMerchant].length > 200) return reject("merchant", typeof body.merchant);
+      const spentAt = parseEventTime(body.time, now);
+      if (!spentAt) return reject("time", body.time);
+      args = {
+        p_user_id: profile.id,
+        p_token_hash: tokenDigest(token),
+        p_kind: "purchase",
+        p_source: "apple_pay",
+        p_amount: walletAmount.amount,
+        p_merchant: walletMerchant,
+        p_spent_at: spentAt,
+        p_category: categorize(walletMerchant),
+        p_currency: walletAmount.currency,
+        p_wallet_name: optionalText(body.card, 120),
+        p_bank: null,
+        p_last4: null,
+      };
+    }
 
     try {
       const recorded = await backend.recordApplePay(args);
@@ -314,9 +395,16 @@ export function createIngestHandler({ backend, now = () => new Date() }: Handler
         return json({ error: "internal_error" }, 500);
       }
       if (typeof recorded.result !== "object" || recorded.result === null) return json({ error: "internal_error" }, 500);
-      const result = recorded.result as { ok?: unknown; duplicate?: unknown; id?: unknown };
+      const result = recorded.result as Record<string, unknown>;
       if (result.ok !== true || typeof result.duplicate !== "boolean") return json({ error: "internal_error" }, 500);
-      return json({ ok: true, duplicate: result.duplicate, ...(typeof result.id === "string" ? { id: result.id } : {}) });
+      return json({
+        ok: true,
+        kind: args.p_kind,
+        duplicate: result.duplicate,
+        ...(result.merged === true ? { merged: true } : {}),
+        ...(typeof result.matched === "boolean" ? { matched: result.matched } : {}),
+        ...(typeof result.id === "string" ? { id: result.id } : {}),
+      });
     } catch {
       return json({ error: "internal_error" }, 500);
     }

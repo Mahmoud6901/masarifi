@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../data.dart';
 import '../format.dart';
-import '../models.dart';
 import '../theme.dart';
 import 'assistant_screen.dart';
+import 'expense_tile.dart';
 import 'expenses_screen.dart';
 import 'installments_screen.dart';
 import 'settings_screen.dart';
@@ -253,7 +253,7 @@ class _OverviewTab extends StatelessWidget {
             )
           else
             for (final e in data.expenses.take(5)) ...[
-              _PaymentTile(e),
+              ExpenseTile(e, card: data.cardFor(e.cardId)),
               const SizedBox(height: 8),
             ],
         ],
@@ -332,7 +332,9 @@ class _StatRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: theme.textTheme.bodyMedium?.copyWith(color: context.mc.muted),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.mc.muted,
+            ),
           ),
         ),
         const SizedBox(width: 16),
@@ -341,61 +343,6 @@ class _StatRow extends StatelessWidget {
           style: theme.textTheme.titleMedium?.copyWith(color: valueColor),
         ),
       ],
-    );
-  }
-}
-
-class _PaymentTile extends StatelessWidget {
-  const _PaymentTile(this.expense);
-
-  final Expense expense;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final c = context.mc;
-    final applePay = expense.source == 'apple_pay';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: c.well, shape: BoxShape.circle),
-              child: Icon(
-                applePay ? Icons.apple : Icons.edit_note_outlined,
-                size: 20,
-                color: c.ink,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    expense.merchant,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  Text(
-                    '${expense.category} · ${shortDate(expense.spentAt)}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              money(expense.amount, expense.currency),
-              style: theme.textTheme.titleMedium,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

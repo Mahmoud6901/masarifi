@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data.dart';
-import '../format.dart';
 import '../logic.dart';
 import '../models.dart';
 import '../money.dart';
 import '../theme.dart';
+import 'expense_tile.dart';
 import 'profile_required.dart';
 
 class ExpensesScreen extends StatelessWidget {
@@ -71,53 +71,7 @@ class ExpensesScreen extends StatelessWidget {
                           return false;
                         }
                       },
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: c.well,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  e.source == 'apple_pay'
-                                      ? Icons.apple
-                                      : Icons.edit_note_outlined,
-                                  size: 20,
-                                  color: c.ink,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      e.merchant,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.titleMedium,
-                                    ),
-                                    Text(
-                                      '${e.category} · ${shortDate(e.spentAt)}',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                money(e.amount, e.currency),
-                                style: theme.textTheme.titleMedium,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      child: ExpenseTile(e, card: data.cardFor(e.cardId)),
                     ),
                   );
                 },

@@ -12,4 +12,5 @@ await Promise.all([
   import("../agent/repository_test.ts"),
   import("../agent/places_test.ts"),
   import("../ingest/index_test.ts"),
+  import("../ingest/sms_test.ts"),
 ]);

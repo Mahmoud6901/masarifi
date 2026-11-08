@@ -61,7 +61,14 @@ BudgetSummary computeBudget({
             !e.spentAt.isBefore(monthStart(now)) &&
             !e.spentAt.isAfter(now),
       )
-      .fold<int>(0, (s, e) => s + moneyUnits(e.amount, currency));
+      // Refunds lower what a purchase cost.
+      .fold<int>(
+        0,
+        (s, e) =>
+            s +
+            moneyUnits(e.amount, currency) -
+            moneyUnits(e.refundedAmount, currency),
+      );
   return BudgetSummary(
     income: moneyFromUnits(moneyUnits(income, currency), currency),
     installmentsDue: moneyFromUnits(due, currency),

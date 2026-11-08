@@ -418,6 +418,31 @@ Deno.test("exact fils and binary-float traps stay exact", () => {
   );
 });
 
+Deno.test("refunds reduce spending and over-refunds are rejected", () => {
+  const budget = computeBudget(
+    { currency: "SAR", monthly_income: 1000 },
+    [],
+    [
+      { amount: 100, refunded_amount: 30, currency: "SAR", spent_at: "2026-11-02T00:00:00+00:00" },
+      { amount: 50, refunded_amount: 50, currency: "SAR", spent_at: "2026-11-03T00:00:00+00:00" },
+      { amount: 20, refunded_amount: null, currency: "SAR", spent_at: "2026-11-04T00:00:00+00:00" },
+    ],
+    CONTEXT,
+  );
+  assert.deepEqual(
+    [budget.spent_this_month, budget.safe_to_spend_this_month],
+    ["90.00", "910.00"],
+  );
+  assert.throws(() =>
+    computeBudget(
+      { currency: "SAR", monthly_income: 0 },
+      [],
+      [{ amount: 10, refunded_amount: 11, currency: "SAR", spent_at: "2026-11-02T00:00:00+00:00" }],
+      CONTEXT,
+    )
+  );
+});
+
 Deno.test(
   "canonical decimal inputs accept exact precision and reject ambiguous text",
   () => {
