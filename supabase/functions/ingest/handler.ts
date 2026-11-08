@@ -44,7 +44,8 @@ function validAmount(value: number, currency: string): boolean {
   return Number.isFinite(value) && value >= 0 && value <= MAX_AMOUNT && decimalPlaces(value) <= minorUnits(currency);
 }
 
-const CURRENCY_WRAPPER = /SAR|SR|USD|EUR|GBP|AED|KWD|BHD|QAR|OMR|ر\.س\.?|د\.إ\.?|ر\.ق\.?|د\.ك\.?|د\.ب\.?|ر\.ع\.?|ريال(?:\s+سعودي)?|[$€£]/;
+// ⃁ is the Saudi Riyal sign (Unicode 17); iOS Wallet amounts use it.
+const CURRENCY_WRAPPER = /SAR|SR|USD|EUR|GBP|AED|KWD|BHD|QAR|OMR|ر\.س\.?|د\.إ\.?|ر\.ق\.?|د\.ك\.?|د\.ب\.?|ر\.ع\.?|ريال(?:\s+سعودي)?|[$€£⃁]/;
 const CURRENCY_PREFIX = new RegExp(`^(${CURRENCY_WRAPPER.source})\\s*`, "i");
 const CURRENCY_SUFFIX = new RegExp(`\\s*(${CURRENCY_WRAPPER.source})$`, "i");
 const WRAPPER_CURRENCY_CODES: Record<string, string> = {
@@ -53,7 +54,7 @@ const WRAPPER_CURRENCY_CODES: Record<string, string> = {
   QAR: "QAR", رق: "QAR",
   KWD: "KWD", دك: "KWD",
   BHD: "BHD", دب: "BHD",
-  OMR: "OMR", رع: "OMR",
+  OMR: "OMR", رع: "OMR", "⃁": "SAR",
   USD: "USD", "$": "USD", EUR: "EUR", "€": "EUR", GBP: "GBP", "£": "GBP",
 };
 
@@ -275,11 +276,24 @@ export function createIngestHandler({ backend, now = () => new Date() }: Handler
     }
     if (!validPayload(body)) return json({ error: "invalid_payload" }, 400);
 
+    // Name the failing field so a Shortcut's notification says what to fix.
+    // Logs carry only the field and the value's shape (digits masked as 9),
+    // never the amount, merchant or token.
+    const reject = (field: string, value: unknown) => {
+      const shape = typeof value === "string"
+        ? value.replace(/[0-9٠-٩۰-۹]/g, "9").slice(0, 40)
+          // Escape non-ASCII so log viewers cannot hide symbols like U+20C1.
+          .replace(/[^\x20-\x7e]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`)
+        : typeof value;
+      console.warn(JSON.stringify({ ingest_rejected: field, shape }));
+      return json({ error: "invalid_payload", field }, 400);
+    };
     const payment = parsePaymentAmount(body.amount, profile.currency, body.currency);
+    if (payment === null) return reject("amount", body.amount);
     const merchant = typeof body.merchant === "string" ? body.merchant.trim() : "";
-    if (payment === null || !merchant || [...merchant].length > 200) return json({ error: "invalid_payload" }, 400);
+    if (!merchant || [...merchant].length > 200) return reject("merchant", typeof body.merchant);
     const spentAt = parseEventTime(body.time, now);
-    if (!spentAt) return json({ error: "invalid_payload" }, 400);
+    if (!spentAt) return reject("time", body.time);
 
     const args: RecordApplePayArgs = {
       p_user_id: profile.id,

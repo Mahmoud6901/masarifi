@@ -131,6 +131,31 @@ Deno.test("handler persists exact fils values and rejects SAR overprecision", as
   if (fake.calls.records.length !== recorded) throw new Error("Invalid precision wrote a record");
 });
 
+Deno.test("handler stores Wallet Riyal-sign amounts and names the failing field", async () => {
+  const fake = backend();
+  const handler = createIngestHandler({ backend: fake.implementation });
+  const ok = await handler(request({ amount: "⃁ 10.00", merchant: "HungerStation" }));
+  const stored = fake.calls.records.at(-1);
+  if (ok.status !== 200 || stored?.p_amount !== 10 || stored.p_currency !== "SAR") throw new Error("Riyal-sign amount was not stored as 10 SAR");
+  const recorded = fake.calls.records.length;
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    for (const [body, field] of [
+      [{ amount: "ten", merchant: "Shop" }, "amount"],
+      [{ amount: 1, merchant: "  " }, "merchant"],
+      [{ amount: 1, merchant: "Shop", time: "8 Nov 2026" }, "time"],
+    ] as const) {
+      const response = await handler(request(body));
+      const reply = await response.json();
+      if (response.status !== 400 || reply.error !== "invalid_payload" || reply.field !== field) throw new Error(`Expected 400 naming ${field}`);
+    }
+  } finally {
+    console.warn = warn;
+  }
+  if (fake.calls.records.length !== recorded) throw new Error("Rejected payload wrote a record");
+});
+
 Deno.test("category rules keep deterministic English, Arabic, and fallback matches", () => {
   const checks: [string, string][] = [
     ["Kudu Cafe", "food"],
@@ -234,10 +259,14 @@ Deno.test("currency wrappers, explicit currency, profile currency, and conflicts
     ["ر.س 5", "SAR"], ["د.إ 5", "AED"], ["ر.ق 5", "QAR"],
     ["د.ك 1.255", "KWD"], ["د.ب 1.255", "BHD"], ["ر.ع 1.255", "OMR"],
     ["$5", "USD"], ["€5", "EUR"], ["£5", "GBP"], ["SR 5", "SAR"],
+    ["⃁ 10.00", "SAR"], ["⃁10.00", "SAR"], ["10.00 ⃁", "SAR"], ["⃁ 10.00", "SAR"],
   ] as const) {
     const parsed = parsePaymentAmount(raw);
     if (parsed?.currency !== expected) throw new Error(`Wrong wrapper currency for ${raw}`);
   }
+  // iOS Wallet writes Saudi amounts with the Riyal sign (U+20C1).
+  if (parsePaymentAmount("⃁ 1,234.50", "SAR")?.amount !== 1234.5) throw new Error("Riyal sign amount not parsed");
+  if (parsePaymentAmount("⃁ 10.00", "SAR", "AED") !== null) throw new Error("Riyal sign conflicting with explicit currency was accepted");
   const profileKwd = backend({ async findProfileByTokenHash() { return { profile: { id: "user-1", ingest_token: token, currency: "KWD" } }; } });
   const handler = createIngestHandler({ backend: profileKwd.implementation });
   const profileAmount = await handler(request({ amount: "1,255", merchant: "Shop" }));
