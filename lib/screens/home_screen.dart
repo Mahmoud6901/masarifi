@@ -253,7 +253,11 @@ class _OverviewTab extends StatelessWidget {
             )
           else
             for (final e in data.expenses.take(5)) ...[
-              ExpenseTile(e, card: data.cardFor(e.cardId)),
+              ExpenseTile(
+                e,
+                card: data.cardFor(e.cardId),
+                onDelete: () => confirmDeleteExpense(context, data, e),
+              ),
               const SizedBox(height: 8),
             ],
         ],

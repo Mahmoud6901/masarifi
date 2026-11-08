@@ -1,4 +1,4 @@
-import { createIngestHandler, type IngestBackend, type RecordApplePayArgs } from "./handler.ts";
+import { createIngestHandler, replyText, type IngestBackend, type RecordApplePayArgs } from "./handler.ts";
 import { createClaudeSmsReader, groundSmsReading, numbersInText, prefilterSms, type SmsReading } from "./sms.ts";
 
 const token = "a".repeat(48);
@@ -23,7 +23,7 @@ function fakeBackend() {
 }
 
 function post(body: unknown): Request {
-  return new Request("https://local.test/ingest", {
+  return new Request("https://local.test/ingest?format=json", {
     method: "POST",
     headers: { "x-ingest-token": token, "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -196,5 +196,41 @@ Deno.test("an SMS sent as a Message object or a list is still read as an SMS", a
     const response = await createIngestHandler({ backend: fake.implementation, readSms: sms.read })(post({ text, time: instant }));
     if (response.status !== 200 || fake.records[0]?.p_source !== "sms") throw new Error(`Expected an SMS save for ${JSON.stringify(text)}`);
     if (sms.calls[0] !== RAJHI_ONLINE) throw new Error("The reader must get the message content only");
+  }
+});
+
+Deno.test("the Shortcut gets one short readable line by default", async () => {
+  const fake = fakeBackend();
+  const plain = new Request("https://local.test/ingest", {
+    method: "POST",
+    headers: { "x-ingest-token": token, "content-type": "application/json" },
+    body: JSON.stringify({ text: { amount: "⃁10.50", merchant: "HungerStation" }, time: instant }),
+  });
+  const response = await createIngestHandler({ backend: fake.implementation })(plain);
+  const text = await response.text();
+  if (response.status !== 200 || text !== "✓ 10.50 SAR · HungerStation") throw new Error(`Got ${response.status} ${text}`);
+  if (!response.headers.get("content-type")?.startsWith("text/plain")) throw new Error("Expected text/plain");
+  const bad = await createIngestHandler({ backend: fake.implementation })(new Request("https://local.test/ingest", {
+    method: "POST", headers: { "x-ingest-token": "0".repeat(48), "content-type": "application/json" }, body: "{}",
+  }));
+  if (bad.status !== 401 || (await bad.text()) !== "⚠ Wrong token") throw new Error("Errors keep their status and read plainly");
+});
+
+Deno.test("reply lines stay short for every outcome", () => {
+  const cases: [Record<string, unknown>, string][] = [
+    [{ ok: true, kind: "purchase", amount: 10, currency: "SAR", merchant: "Jarir", duplicate: false }, "✓ 10 SAR · Jarir"],
+    [{ ok: true, kind: "purchase", amount: 1.25, currency: "KWD", merchant: "Cafe", duplicate: false }, "✓ 1.250 KWD · Cafe"],
+    [{ ok: true, kind: "purchase", duplicate: false, merged: true }, "✓ Already saved"],
+    [{ ok: true, kind: "purchase", duplicate: true }, "✓ Already saved"],
+    [{ ok: true, kind: "refund", amount: 45, currency: "SAR", merchant: "NOON", duplicate: false, matched: true }, "↩ Refund 45 SAR · NOON"],
+    [{ ok: true, kind: "refund", amount: 45, currency: "SAR", merchant: null, duplicate: false, matched: false }, "↩ Refund 45 SAR (no match)"],
+    [{ ok: true, ignored: "transfer" }, "Skipped: transfer"],
+    [{ ok: true, ignored: "amount_not_in_sms" }, "Skipped: amount not in sms"],
+    [{ error: "invalid_payload", field: "time" }, "⚠ Bad time format"],
+    [{ error: "internal_error" }, "⚠ Server error, try again"],
+  ];
+  for (const [body, expected] of cases) {
+    const got = replyText(body);
+    if (got !== expected) throw new Error(`${JSON.stringify(body)} gave "${got}", expected "${expected}"`);
   }
 });

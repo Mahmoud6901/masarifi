@@ -1,15 +1,56 @@
 import 'package:flutter/material.dart';
 
+import '../data.dart';
 import '../format.dart';
 import '../models.dart';
 import '../theme.dart';
 
+/// Asks first, then deletes the payment; a failure leaves it in place.
+Future<void> confirmDeleteExpense(
+  BuildContext context,
+  AppData data,
+  Expense expense,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Delete payment?'),
+      content: Text(
+        '${expense.merchant} · ${money(expense.amount, expense.currency)}',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text('Delete', style: TextStyle(color: ctx.mc.negative)),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+  try {
+    await data.deleteExpense(expense.id);
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not delete. Try again.')),
+      );
+    }
+  }
+}
+
 /// One payment row: where it came from, which card, and any bank refund.
 class ExpenseTile extends StatelessWidget {
-  const ExpenseTile(this.expense, {this.card, super.key});
+  const ExpenseTile(this.expense, {this.card, this.onDelete, super.key});
 
   final Expense expense;
   final PaymentCard? card;
+
+  /// Shows a delete button when set.
+  final VoidCallback? onDelete;
 
   IconData get _icon => switch (expense.source) {
     'apple_pay' => Icons.apple,
@@ -85,6 +126,15 @@ class ExpenseTile extends StatelessWidget {
                   ),
               ],
             ),
+            if (onDelete != null)
+              IconButton(
+                tooltip: 'Delete payment',
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsetsDirectional.only(start: 8),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                icon: Icon(Icons.delete_outline, size: 20, color: c.muted),
+                onPressed: onDelete,
+              ),
           ],
         ),
       ),

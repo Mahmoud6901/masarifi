@@ -1,4 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:masarifi/screens/expense_tile.dart';
+import 'package:masarifi/theme.dart';
 import 'package:masarifi/logic.dart';
 import 'package:masarifi/models.dart';
 import 'package:masarifi/screens/settings_screen.dart';
@@ -99,19 +102,36 @@ void main() {
     );
   });
 
-  test('Siri prompt carries the URL, header and every body field', () {
+  test('Siri prompt carries the URL, header and both body fields', () {
     final p = siriPrompt('https://x.supabase.co/functions/v1/ingest', 'a' * 48);
     for (final part in [
       'https://x.supabase.co/functions/v1/ingest',
+      'method POST',
       'x-ingest-token = ${'a' * 48}',
-      'amount =',
-      'merchant =',
-      'card =',
-      'text =',
-      'sender =',
+      'text = Shortcut Input',
       'ISO 8601',
     ]) {
       expect(p, contains(part));
     }
+    expect(p, isNot(contains('amount =')));
+  });
+
+  testWidgets('a payment card shows a delete button only when asked', (
+    tester,
+  ) async {
+    var deletes = 0;
+    Future<void> show({VoidCallback? onDelete}) => tester.pumpWidget(
+      MaterialApp(
+        theme: masarifiTheme(Brightness.dark),
+        home: Scaffold(
+          body: ExpenseTile(_expense(10, refunded: 2), onDelete: onDelete),
+        ),
+      ),
+    );
+    await show(onDelete: () => deletes++);
+    await tester.tap(find.byTooltip('Delete payment'));
+    expect(deletes, 1);
+    await show();
+    expect(find.byTooltip('Delete payment'), findsNothing);
   });
 }

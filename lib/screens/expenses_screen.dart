@@ -71,7 +71,11 @@ class ExpensesScreen extends StatelessWidget {
                           return false;
                         }
                       },
-                      child: ExpenseTile(e, card: data.cardFor(e.cardId)),
+                      child: ExpenseTile(
+                        e,
+                        card: data.cardFor(e.cardId),
+                        onDelete: () => confirmDeleteExpense(context, data, e),
+                      ),
                     ),
                   );
                 },

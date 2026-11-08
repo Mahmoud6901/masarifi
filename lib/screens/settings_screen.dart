@@ -12,13 +12,12 @@ import '../theme.dart';
 /// A prompt the user pastes into Siri or Shortcuts to build the capture
 /// Shortcut. It carries the private token, so it is copied, never shown.
 String siriPrompt(String ingestUrl, String token) =>
-    'Create a shortcut named "Masarifi" that receives any input. '
-    'Add "Get Contents of URL" with URL $ingestUrl, method POST, '
-    'header x-ingest-token = $token, and a JSON body: '
-    'amount = Shortcut Input Amount, merchant = Shortcut Input Merchant, '
-    'card = Shortcut Input Card, text = Shortcut Input as text, '
-    'sender = Shortcut Input Sender, time = Current Date formatted as ISO 8601. '
-    'Then show a notification with the Contents of URL.';
+    'Create a shortcut named Masarifi. It receives any input, and if there is '
+    'no input it continues. Add one action: Get Contents of URL with URL '
+    '$ingestUrl, method POST, header x-ingest-token = $token, and a JSON '
+    'request body with exactly two text fields: text = Shortcut Input, and '
+    'time = Current Date formatted as ISO 8601 including the time. Then add '
+    'Show Notification showing the Contents of URL. Do not add any other actions.';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -304,15 +303,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   static const _steps = [
-    'Tap "Add the Shortcut". Your token is copied first; paste it when '
-        'Shortcuts asks for it.',
-    'In Shortcuts > Automation > + > Wallet, choose Any Card, then '
-        '"Run Immediately" and pick Masarifi.',
-    'Add > Message, set "Message Contains" to شراء, then "Run Immediately" '
-        'and pick Masarifi.\n'
-        'Repeat for Purchase, استرداد and Refund so refunds are caught too.',
-    'No link yet? Tap "Copy Siri prompt" and paste it into Siri or the '
-        'Shortcuts app to build the same Shortcut.',
+    'Tap "Copy Siri prompt" and paste it into "Describe a shortcut" in the '
+        'Shortcuts app. It builds the Masarifi shortcut with your token.',
+    'Apple Pay: make a shortcut that starts with "When Any Card is tapped", '
+        'then a Dictionary of amount, merchant and card from the Wallet input, '
+        'then Run Shortcut Masarifi with the Dictionary as input.',
+    'Bank SMS: save each bank\'s SMS sender as a contact. Make a shortcut that '
+        'starts with "When I receive a message" where Sender is your banks, '
+        'then Run Shortcut Masarifi with the Message as input.',
+    'In-app and online payments are caught by the bank SMS. The notification '
+        'shows what was saved, like "✓ 10 SAR · HungerStation".',
   ];
 
   Future<void> _copy(BuildContext context, String text, String done) async {

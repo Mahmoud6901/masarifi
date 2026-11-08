@@ -329,7 +329,73 @@ function optionalText(value: unknown, max: number): string | null {
   return trimmed && [...trimmed].length <= max ? trimmed : null;
 }
 
-export function createIngestHandler({ backend, now = () => new Date(), readSms, shortcutUrl }: HandlerOptions) {
+const DECIMALS: Record<string, number> = { KWD: 3, BHD: 3, OMR: 3 };
+
+function moneyText(amount: unknown, currency: unknown): string {
+  if (typeof amount !== "number" || !Number.isFinite(amount) || typeof currency !== "string") return "";
+  const digits = Number.isInteger(amount) ? 0 : DECIMALS[currency] ?? 2;
+  return `${amount.toFixed(digits)} ${currency}`;
+}
+
+const ERROR_TEXT: Record<string, string> = {
+  invalid_token: "⚠ Wrong token",
+  invalid_json: "⚠ Invalid request",
+  method_not_allowed: "⚠ Use POST",
+  sms_reader_unavailable: "⚠ SMS reading is off",
+  sms_reader_failed: "⚠ Couldn't read SMS, try later",
+};
+
+const FIELD_TEXT: Record<string, string> = {
+  amount: "⚠ No amount received",
+  merchant: "⚠ No merchant received",
+  time: "⚠ Bad time format",
+  text: "⚠ Message too long",
+};
+
+/** One short line for the Shortcut's notification. */
+export function replyText(body: Record<string, unknown>): string {
+  if (body.ok === true) {
+    if (typeof body.ignored === "string") {
+      const reason = body.ignored.toLowerCase().replace(/[^a-z ]+/g, " ").trim().slice(0, 24);
+      return `Skipped: ${reason || "not a payment"}`;
+    }
+    if (body.duplicate === true || body.merged === true) return "✓ Already saved";
+    const what = [moneyText(body.amount, body.currency), typeof body.merchant === "string" ? body.merchant : ""]
+      .filter(Boolean)
+      .join(" · ");
+    if (body.kind === "refund") return `↩ Refund ${what}${body.matched === false ? " (no match)" : ""}`.trim();
+    return `✓ ${what || "Saved"}`;
+  }
+  const error = typeof body.error === "string" ? body.error : "";
+  if (error === "invalid_payload" && typeof body.field === "string") return FIELD_TEXT[body.field] ?? "⚠ Invalid request";
+  return ERROR_TEXT[error] ?? (error === "invalid_payload" ? "⚠ Invalid request" : "⚠ Server error, try again");
+}
+
+/**
+ * Payments get one readable line (text/plain) so the Shortcut's notification
+ * is short. `?format=json` keeps the structured reply for tools and tests;
+ * GET /shortcut stays JSON for the app.
+ */
+export function createIngestHandler(options: HandlerOptions) {
+  const handle = createJsonHandler(options);
+  return async (request: Request): Promise<Response> => {
+    const response = await handle(request);
+    if (request.method !== "POST" || new URL(request.url).searchParams.get("format") === "json") return response;
+    let body: unknown;
+    try {
+      body = await response.clone().json();
+    } catch {
+      return response;
+    }
+    if (!validPayload(body)) return response;
+    return new Response(replyText(body), {
+      status: response.status,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  };
+}
+
+function createJsonHandler({ backend, now = () => new Date(), readSms, shortcutUrl }: HandlerOptions) {
   const shortcut = validShortcutUrl(shortcutUrl);
   return async (request: Request): Promise<Response> => {
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/shortcut")) {
@@ -461,6 +527,9 @@ export function createIngestHandler({ backend, now = () => new Date(), readSms, 
       return json({
         ok: true,
         kind: args.p_kind,
+        amount: args.p_amount,
+        currency: args.p_currency,
+        merchant: args.p_merchant,
         duplicate: result.duplicate,
         ...(result.merged === true ? { merged: true } : {}),
         ...(typeof result.matched === "boolean" ? { matched: result.matched } : {}),

@@ -28,7 +28,7 @@ function backend(overrides: Partial<IngestBackend> = {}) {
 }
 
 function request(body: unknown, method = "POST", authToken = token): Request {
-  return new Request("https://local.test/ingest", {
+  return new Request("https://local.test/ingest?format=json", {
     method,
     headers: authToken === "" ? {} : { "x-ingest-token": authToken, "content-type": "application/json" },
     body: method === "POST" ? JSON.stringify(body) : undefined,
@@ -212,7 +212,7 @@ Deno.test("handler validates JSON shape, amount, merchant, and ISO timestamp", a
   }
   if (fake.calls.records.length !== 0) throw new Error("Invalid payload wrote a record");
 
-  const malformed = await handler(new Request("https://local.test/ingest", {
+  const malformed = await handler(new Request("https://local.test/ingest?format=json", {
     method: "POST", headers: { "x-ingest-token": token, "content-type": "application/json" }, body: "{",
   }));
   if (malformed.status !== 400) throw new Error("Expected malformed JSON 400");
