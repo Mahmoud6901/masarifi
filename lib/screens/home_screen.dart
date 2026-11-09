@@ -146,6 +146,12 @@ class _OverviewTab extends StatelessWidget {
     final theme = Theme.of(context);
     final c = context.mc;
     final negative = b.safeToSpend < 0;
+    final now = data.now();
+    final monthStart = DateTime(now.year, now.month);
+    // Newest first, from the 1st of this month.
+    final thisMonth = data.expenses
+        .where((e) => !e.spentAt.isBefore(monthStart))
+        .toList();
 
     return RefreshIndicator(
       onRefresh: data.refresh,
@@ -242,17 +248,17 @@ class _OverviewTab extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 36),
-          Text('Recent payments', style: theme.textTheme.headlineSmall),
+          Text('This month', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 14),
           if (data.loading && data.expenses.isEmpty)
             const Center(child: CircularProgressIndicator())
-          else if (data.expenses.isEmpty)
+          else if (thisMonth.isEmpty)
             Text(
-              'No payments yet. Set up Apple Pay capture in Settings.',
+              'No payments this month yet.',
               style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
             )
           else
-            for (final e in data.expenses.take(5)) ...[
+            for (final e in thisMonth) ...[
               ExpenseTile(
                 e,
                 card: data.cardFor(e.cardId),

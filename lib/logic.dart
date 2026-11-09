@@ -103,6 +103,17 @@ DateTime? nextDueDate(InstallmentPlan plan, [DateTime? now]) {
   return clampedPaymentDate(date.year, date.month, plan.dueDay);
 }
 
+/// A plan's current payment can be swiped (paid / not paid) only once its
+/// month has arrived: due this month or overdue. Later months stay locked.
+bool isPaymentOpen(InstallmentPlan plan, DateTime now) {
+  final date = plan.nextDueDate;
+  if (!plan.active || plan.isFinished || date == null) return false;
+  return !DateTime(
+    date.year,
+    date.month,
+  ).isAfter(DateTime(now.year, now.month));
+}
+
 /// Total of the remaining payments across active plans.
 double totalRemainingInstallments(
   List<InstallmentPlan> plans, {

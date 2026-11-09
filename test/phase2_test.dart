@@ -410,19 +410,36 @@ void main() {
   );
 
   testWidgets(
-    'swipe waits for deletion, keeps rejected rows and removes a confirmed row',
+    'delete button waits for deletion, keeps rejected rows and removes a confirmed row',
     (tester) async {
-      final f = (await tester.runAsync(_Fixture.create))!;
+      final f = (await tester.runAsync(
+        () => _Fixture.create(now: () => DateTime(2026, 11, 15, 12)),
+      ))!;
       f.rows.add(_expense());
       await tester.runAsync(f.data.refresh);
       f.deleteGate = Completer<void>();
       f.failDelete = true;
       await _mount(tester, f, const ExpensesScreen());
+      Future<void> deleteCafe() async {
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(const ValueKey('expense-1')),
+            matching: find.byTooltip('Delete payment'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+        await tester.pumpAndSettle();
+      }
+
+      // Swiping no longer deletes.
       await tester.drag(
         find.byKey(const ValueKey('expense-1')),
         const Offset(-800, 0),
       );
       await tester.pumpAndSettle();
+      expect(f.count('DELETE', '/expenses'), 0);
+      await deleteCafe();
       expect(find.text('Cafe'), findsOneWidget);
       f.deleteGate!.complete();
       await tester.pumpAndSettle();
@@ -430,11 +447,7 @@ void main() {
       expect(find.text('Could not delete. Try again.'), findsOneWidget);
       f.failDelete = false;
       f.failReads = true;
-      await tester.drag(
-        find.byKey(const ValueKey('expense-1')),
-        const Offset(-800, 0),
-      );
-      await tester.pumpAndSettle();
+      await deleteCafe();
       expect(find.text('Cafe'), findsNothing);
       expect(f.data.expenses, isEmpty);
       await _finish(tester, f);

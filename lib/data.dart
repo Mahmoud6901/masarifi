@@ -58,6 +58,9 @@ class AppData extends ChangeNotifier {
   String? error;
 
   String get currency => profile?.currency ?? 'SAR';
+
+  /// The app's clock (injectable in tests); screens use it for "this month".
+  DateTime now() => _now();
   String get accountEmail =>
       _isCurrentUser ? _db.auth.currentUser?.email ?? '' : '';
 
@@ -493,6 +496,76 @@ class AppData extends ChangeNotifier {
       return response['applied'] as bool;
     } finally {
       _endPlan(plan.id);
+    }
+  }
+
+  /// "Not paid": the payment due now moves to the end of the plan. The count
+  /// stays the same and the next unpaid date moves one month later. Only a
+  /// payment due this month or earlier can be deferred.
+  Future<InstallmentPlan> deferPlan(InstallmentPlan plan) async {
+    final userId = _requireUser();
+    final due = plan.nextDueDate;
+    if (plan.isFinished || !plan.active || due == null) {
+      throw StateError('Only an active, scheduled plan can be deferred.');
+    }
+    if (!isPaymentOpen(plan, _now())) {
+      throw StateError('This payment is not due yet.');
+    }
+    final next = followingPaymentDate(due, plan.dueDay);
+    _beginPlan(plan.id);
+    try {
+      final row = await _db
+          .from('installment_plans')
+          .update({'next_due_date': _dateText(next)})
+          .eq('id', plan.id)
+          .eq('user_id', userId)
+          .eq('paid_count', plan.paidCount)
+          .eq('active', true)
+          .eq('next_due_date', _dateText(due))
+          .select()
+          .single();
+      _cachePlan(row, plan.id);
+      final updated = plans.firstWhere((p) => p.id == plan.id);
+      await refresh();
+      return updated;
+    } finally {
+      _endPlan(plan.id);
+    }
+  }
+
+  /// Undo of a swipe: puts [before] back, but only if the plan is still
+  /// exactly as the swipe left it ([after]).
+  Future<void> restorePlan(
+    InstallmentPlan before,
+    InstallmentPlan after,
+  ) async {
+    final userId = _requireUser();
+    final step = after.paidCount - before.paidCount;
+    if (before.id != after.id ||
+        before.nextDueDate == null ||
+        (step != 0 && step != 1)) {
+      throw ArgumentError('Only the last swipe can be undone.');
+    }
+    _beginPlan(before.id);
+    try {
+      var query = _db
+          .from('installment_plans')
+          .update({
+            'paid_count': before.paidCount,
+            'next_due_date': _dateText(before.nextDueDate!),
+            'active': true,
+          })
+          .eq('id', before.id)
+          .eq('user_id', userId)
+          .eq('paid_count', after.paidCount);
+      query = after.nextDueDate == null
+          ? query.isFilter('next_due_date', null)
+          : query.eq('next_due_date', _dateText(after.nextDueDate!));
+      final row = await query.select().single();
+      _cachePlan(row, before.id);
+      await refresh();
+    } finally {
+      _endPlan(before.id);
     }
   }
 

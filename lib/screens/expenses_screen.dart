@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data.dart';
+import '../format.dart';
 import '../logic.dart';
 import '../models.dart';
 import '../money.dart';
@@ -12,11 +13,27 @@ import 'profile_required.dart';
 class ExpensesScreen extends StatelessWidget {
   const ExpensesScreen({super.key});
 
+  /// Calendar months on this page, the current one included. Older payments
+  /// stay saved; they are only hidden here.
+  static const monthsShown = 5;
+
   @override
   Widget build(BuildContext context) {
     final data = context.watch<AppData>();
     final theme = Theme.of(context);
     final c = context.mc;
+    final now = data.now();
+    final current = DateTime(now.year, now.month);
+    final oldest = DateTime(now.year, now.month - (monthsShown - 1));
+    // data.expenses is newest first, so each month keeps that order.
+    final byMonth = <DateTime, List<Expense>>{};
+    for (final e in data.expenses) {
+      if (e.spentAt.isBefore(oldest)) continue;
+      (byMonth[DateTime(e.spentAt.year, e.spentAt.month)] ??= []).add(e);
+    }
+    final months = {current, ...byMonth.keys}.toList()
+      ..sort((a, b) => b.compareTo(a));
+
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _addExpense(context),
@@ -25,61 +42,30 @@ class ExpensesScreen extends StatelessWidget {
       ),
       body: RefreshIndicator(
         onRefresh: data.refresh,
-        child: data.expenses.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 24),
-                children: [
-                  Text(
-                    'No expenses yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
-                  ),
-                ],
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 100),
+          children: [
+            Text('Last five months', style: theme.textTheme.headlineSmall),
+            const SizedBox(height: 14),
+            if (data.loading && data.expenses.isEmpty)
+              const Center(child: CircularProgressIndicator())
+            else if (byMonth.isEmpty)
+              Text(
+                'No expenses in the last five months.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
               )
-            : ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsetsDirectional.fromSTEB(20, 24, 20, 100),
-                itemCount: data.expenses.length,
-                itemBuilder: (context, i) {
-                  final e = data.expenses[i];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Dismissible(
-                      key: ValueKey(e.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        decoration: BoxDecoration(
-                          color: c.negative,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        alignment: AlignmentDirectional.centerEnd,
-                        padding: const EdgeInsetsDirectional.only(end: 20),
-                        child: Icon(Icons.delete_outline, color: c.canvas),
-                      ),
-                      confirmDismiss: (_) async {
-                        try {
-                          await data.deleteExpense(e.id);
-                          return true;
-                        } catch (_) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Could not delete. Try again.'),
-                              ),
-                            );
-                          }
-                          return false;
-                        }
-                      },
-                      child: ExpenseTile(
-                        e,
-                        card: data.cardFor(e.cardId),
-                        onDelete: () => confirmDeleteExpense(context, data, e),
-                      ),
-                    ),
-                  );
-                },
-              ),
+            else
+              for (final month in months)
+                _MonthSection(
+                  key: ValueKey('month-${month.year}-${month.month}'),
+                  month: month,
+                  expenses: byMonth[month] ?? const [],
+                  data: data,
+                  initiallyOpen: month == current,
+                ),
+          ],
+        ),
       ),
     );
   }
@@ -92,6 +78,125 @@ class ExpensesScreen extends StatelessWidget {
       builder: (_) => ProfileRequired(
         data: data,
         builder: (_) => _AddExpenseSheet(data: data),
+      ),
+    );
+  }
+}
+
+/// One calendar month: a tappable header with the month's total after refunds
+/// and where it went, then that month's payments when open.
+class _MonthSection extends StatefulWidget {
+  const _MonthSection({
+    required this.month,
+    required this.expenses,
+    required this.data,
+    required this.initiallyOpen,
+    super.key,
+  });
+
+  final DateTime month;
+  final List<Expense> expenses;
+  final AppData data;
+  final bool initiallyOpen;
+
+  @override
+  State<_MonthSection> createState() => _MonthSectionState();
+}
+
+class _MonthSectionState extends State<_MonthSection> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.mc;
+    final data = widget.data;
+    final cur = data.currency;
+    final perCategory = <String, int>{};
+    var total = 0;
+    for (final e in widget.expenses) {
+      if (e.currency != cur) continue;
+      final units = moneyUnits(e.netAmount, cur);
+      total += units;
+      perCategory.update(e.category, (v) => v + units, ifAbsent: () => units);
+    }
+    final categories = perCategory.entries.where((x) => x.value > 0).toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final count = widget.expenses.length;
+    final summary = categories.isNotEmpty
+        ? categories
+              .map(
+                (x) =>
+                    '${x.key} ${compactAmount(moneyFromUnits(x.value, cur))}',
+              )
+              .join(' · ')
+        : count == 0
+        ? 'No payments'
+        : '$count ${count == 1 ? 'payment' : 'payments'}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: _open,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            monthYear(widget.month),
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            summary,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: c.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      money(moneyFromUnits(total, cur), cur),
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _open ? Icons.expand_less : Icons.expand_more,
+                      color: c.muted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_open) ...[
+            const SizedBox(height: 6),
+            for (final e in widget.expenses)
+              Padding(
+                key: ValueKey(e.id),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ExpenseTile(
+                  e,
+                  card: data.cardFor(e.cardId),
+                  onDelete: () => confirmDeleteExpense(context, data, e),
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }

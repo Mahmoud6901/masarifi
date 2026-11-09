@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:masarifi/data.dart';
 import 'package:masarifi/format.dart';
+import 'package:masarifi/logic.dart';
 import 'package:masarifi/models.dart';
 import 'package:masarifi/screens/installments_screen.dart';
 import 'package:masarifi/screens/expenses_screen.dart';
@@ -482,7 +483,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(f.expenses.single['amount'], 1.255);
       expect(f.expenses.single['currency'], 'KWD');
-      expect(find.text(money(1.255, 'KWD')), findsOneWidget);
+      // The payment itself and its month's total.
+      expect(find.text(money(1.255, 'KWD')), findsNWidgets(2));
       await _mount(tester, f, const SettingsScreen());
       await tester.tap(find.text('Monthly income'));
       await tester.pumpAndSettle();
@@ -847,7 +849,9 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Inactive'), findsOneWidget);
-      expect(find.textContaining('Mark '), findsOneWidget);
+      expect(find.textContaining('Swipe right when paid'), findsOneWidget);
+      // An unscheduled plan has nothing to swipe yet.
+      expect(find.text('Not paid'), findsNothing);
       await tester.tap(find.text('Confirm schedule'));
       await tester.pumpAndSettle();
       await tester.enterText(_field('Due day of month (1–31)'), '31');
@@ -980,4 +984,216 @@ void main() {
     expect(find.text('Previous budget · reload needed'), findsOneWidget);
     await _finish(tester, f);
   });
+
+  test(
+    'not paid moves one month to the end; undo puts the plan back',
+    () async {
+      final f = await _Fixture.create();
+      addTearDown(f.dispose);
+      f.plans.addAll([
+        _plan(),
+        _plan(id: 'late', date: '2026-09-30'),
+        _plan(id: 'future', date: '2026-12-31'),
+      ]);
+      await f.data.refresh();
+      InstallmentPlan plan(String id) =>
+          f.data.plans.firstWhere((p) => p.id == id);
+
+      final before = plan('p');
+      final after = await f.data.deferPlan(before);
+      expect(after.paidCount, 0);
+      expect(after.remainingCount, 3);
+      expect(after.nextDueDate, DateTime(2026, 12, 31));
+      final patch = f.calls('PATCH', '/installment_plans').single;
+      expect(jsonDecode(patch.body), {'next_due_date': '2026-12-31'});
+      expect(patch.url.queryParameters, containsPair('paid_count', 'eq.0'));
+      expect(
+        patch.url.queryParameters,
+        containsPair('next_due_date', 'eq.2026-11-30'),
+      );
+      expect(f.calls('POST', '/expenses'), isEmpty);
+
+      await f.data.restorePlan(before, after);
+      expect(plan('p').nextDueDate, DateTime(2026, 11, 30));
+      final undo = f.calls('PATCH', '/installment_plans').last;
+      expect(jsonDecode(undo.body), {
+        'paid_count': 0,
+        'next_due_date': '2026-11-30',
+        'active': true,
+      });
+      expect(
+        undo.url.queryParameters,
+        containsPair('next_due_date', 'eq.2026-12-31'),
+      );
+
+      // Overdue: one swipe moves one month, and the next one is still due.
+      final late = await f.data.deferPlan(plan('late'));
+      expect(late.nextDueDate, DateTime(2026, 10, 31));
+      expect(isPaymentOpen(late, _now), isTrue);
+
+      // Next month's payment is locked until its month starts.
+      final patches = f.calls('PATCH', '/installment_plans').length;
+      await expectLater(f.data.deferPlan(plan('future')), throwsStateError);
+      expect(f.calls('PATCH', '/installment_plans'), hasLength(patches));
+      expect(isPaymentOpen(plan('future'), _now), isFalse);
+      expect(isPaymentOpen(plan('future'), DateTime(2026, 12, 1)), isTrue);
+    },
+  );
+
+  test('undo of the last payment reopens a finished plan', () async {
+    final f = await _Fixture.create();
+    addTearDown(f.dispose);
+    f.plans.add(_plan(id: 'last', total: 1, amount: 75));
+    await f.data.refresh();
+    final before = f.data.plans.single;
+    f.rpcResponse = {
+      'applied': true,
+      'plan': _plan(id: 'last', date: null, total: 1, paid: 1, active: false),
+    };
+    expect(await f.data.markPlanPaid(before), isTrue);
+    final after = f.data.plans.single;
+    expect(after.isFinished, isTrue);
+    await f.data.restorePlan(before, after);
+    final undo = f.calls('PATCH', '/installment_plans').single;
+    expect(undo.url.queryParameters, containsPair('next_due_date', 'is.null'));
+    expect(undo.url.queryParameters, containsPair('paid_count', 'eq.1'));
+    expect(f.data.plans.single.active, isTrue);
+    expect(f.data.plans.single.paidCount, 0);
+    await expectLater(
+      f.data.restorePlan(before, _planFrom(_plan(id: 'last', paid: 2))),
+      throwsArgumentError,
+    );
+  });
+
+  testWidgets('swipe left defers, Undo restores, swipe right pays', (
+    tester,
+  ) async {
+    final f = (await tester.runAsync(_Fixture.create))!;
+    f.plans.add(_plan());
+    await tester.runAsync(f.data.refresh);
+    await _mount(tester, f, const InstallmentsScreen());
+    expect(find.text('Up next'), findsOneWidget);
+    expect(find.text('December 2026'), findsOneWidget);
+
+    await tester.drag(find.text('Phone p'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(f.data.plans.single.nextDueDate, DateTime(2026, 12, 31));
+    expect(f.data.plans.single.remainingCount, 3);
+    expect(find.text('November 2026 moved to the end'), findsOneWidget);
+    expect(find.text('January 2027'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(f.data.plans.single.nextDueDate, DateTime(2026, 11, 30));
+
+    f.rpcResponse = {
+      'applied': true,
+      'plan': _plan(paid: 1, date: '2026-12-31'),
+    };
+    await tester.drag(find.text('Phone p'), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(f.calls('POST', '/rpc/mark_installment_paid'), hasLength(1));
+    expect(f.data.plans.single.paidCount, 1);
+    expect(find.text('November 2026 marked paid'), findsOneWidget);
+    expect(f.calls('POST', '/expenses'), isEmpty);
+
+    // December is next, but locked until December starts.
+    expect(
+      find.text('Opens on ${dayMonth(DateTime(2026, 12))}'),
+      findsOneWidget,
+    );
+    expect(_button(tester, 'Paid').enabled, isFalse);
+    expect(_button(tester, 'Not paid').enabled, isFalse);
+    final writes = f.requests.length;
+    await tester.drag(find.text('Phone p'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(f.requests.length, writes);
+    await _finish(tester, f);
+  });
+
+  testWidgets('a short drag springs back; right means paid even in RTL', (
+    tester,
+  ) async {
+    final f = (await tester.runAsync(_Fixture.create))!;
+    f.plans.add(_plan());
+    await tester.runAsync(f.data.refresh);
+    await _mount(
+      tester,
+      f,
+      const Directionality(
+        textDirection: TextDirection.rtl,
+        child: InstallmentsScreen(),
+      ),
+    );
+    await tester.drag(find.text('Phone p'), const Offset(80, 0));
+    await tester.pumpAndSettle();
+    expect(f.calls('POST', '/rpc/mark_installment_paid'), isEmpty);
+    expect(f.calls('PATCH', '/installment_plans'), isEmpty);
+
+    f.rpcResponse = {
+      'applied': true,
+      'plan': _plan(paid: 1, date: '2026-12-31'),
+    };
+    await tester.drag(find.text('Phone p'), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(f.calls('POST', '/rpc/mark_installment_paid'), hasLength(1));
+    expect(f.calls('PATCH', '/installment_plans'), isEmpty);
+    await _finish(tester, f);
+  });
+
+  testWidgets('home lists this month only; expenses keep five months', (
+    tester,
+  ) async {
+    final f = (await tester.runAsync(_Fixture.create))!;
+    f.expenses.addAll([
+      {..._expense(id: 'nov', amount: 10), 'merchant': 'Keeta'},
+      {
+        ..._expense(id: 'oct', amount: 20, date: DateTime(2026, 10, 3, 12)),
+        'merchant': 'Jarir',
+        'category': 'shopping',
+      },
+      {
+        ..._expense(id: 'oct2', amount: 120, date: DateTime(2026, 10, 9, 12)),
+        'merchant': 'Bakery',
+        'category': 'food',
+      },
+      {
+        ..._expense(id: 'jun', amount: 30, date: DateTime(2026, 6, 3, 12)),
+        'merchant': 'Old shop',
+      },
+    ]);
+    await tester.runAsync(f.data.refresh);
+
+    await _mount(tester, f, const HomeScreen());
+    expect(find.text('This month'), findsOneWidget);
+    expect(find.text('Keeta'), findsOneWidget);
+    expect(find.text('Jarir'), findsNothing);
+
+    await _mount(tester, f, const ExpensesScreen());
+    expect(find.text('November 2026'), findsOneWidget);
+    expect(find.text('Keeta'), findsOneWidget);
+    expect(find.text('October 2026'), findsOneWidget);
+    expect(find.text('food 120 · shopping 20'), findsOneWidget);
+    expect(find.text(money(140, 'SAR')), findsOneWidget);
+    expect(find.text('Jarir'), findsNothing);
+    expect(find.text('June 2026'), findsNothing);
+    expect(find.text('Old shop'), findsNothing);
+    await tester.tap(find.text('October 2026'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jarir'), findsOneWidget);
+    expect(find.text('Bakery'), findsOneWidget);
+    expect(f.data.expenses, hasLength(4));
+    await _finish(tester, f);
+  });
 }
+
+InstallmentPlan _planFrom(Map<String, dynamic> row) =>
+    InstallmentPlan.fromJson(row);
+
+ButtonStyleButton _button(WidgetTester tester, String label) =>
+    tester.widget<ButtonStyleButton>(
+      find.ancestor(
+        of: find.text(label),
+        matching: find.bySubtype<ButtonStyleButton>(),
+      ),
+    );

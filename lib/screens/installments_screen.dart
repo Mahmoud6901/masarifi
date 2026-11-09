@@ -6,6 +6,7 @@ import '../format.dart';
 import '../logic.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'plan_swipe_card.dart';
 import 'profile_required.dart';
 
 class InstallmentsScreen extends StatelessWidget {
@@ -40,7 +41,9 @@ class InstallmentsScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
                   data.error!,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: c.negative),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: c.negative,
+                  ),
                 ),
               ),
             if (data.loading)
@@ -83,7 +86,7 @@ class InstallmentsScreen extends StatelessWidget {
               ),
             const SizedBox(height: 10),
             Text(
-              'Mark paid updates the plan only. Capture the cash payment or add it in Expenses so spending reflects it.',
+              'Swipe right when paid, left when not paid. This updates the plan only; it doesn\'t add an expense.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 24),
@@ -93,27 +96,49 @@ class InstallmentsScreen extends StatelessWidget {
                 style: theme.textTheme.bodyMedium?.copyWith(color: c.muted),
               ),
             for (final p in active) ...[
-              _card(context, data, p),
+              _plan(context, data, p),
               const SizedBox(height: 12),
             ],
-            for (final p in data.plans.where((p) => !p.active || p.isFinished)) ...[
-              _card(context, data, p),
-              const SizedBox(height: 12),
-            ],
+            for (final p in data.plans.where(
+              (p) => !p.active || p.isFinished,
+            )) ...[_card(context, data, p), const SizedBox(height: 12)],
           ],
         ),
       ),
     );
   }
 
-  Widget _card(BuildContext context, AppData data, InstallmentPlan p) {
+  /// A scheduled plan is a swipe card: right = paid, left = not paid. Only the
+  /// payment due this month (or overdue) can be decided; later ones stay
+  /// locked until their month starts.
+  Widget _plan(BuildContext context, AppData data, InstallmentPlan p) {
+    final date = nextDueDate(p);
+    if (date == null) return _card(context, data, p);
+    return PlanSwipeCard(
+      key: ValueKey('swipe-${p.id}'),
+      enabled: isPaymentOpen(p, data.now()) && !data.planBusy(p.id),
+      peek: p.remainingCount > 1
+          ? _UpNext(plan: p, month: followingPaymentDate(date, p.dueDay))
+          : null,
+      onDecide: (paid) => _swipe(context, data, p, paid),
+      builder: (context, decide) => _card(context, data, p, decide: decide),
+    );
+  }
+
+  Widget _card(
+    BuildContext context,
+    AppData data,
+    InstallmentPlan p, {
+    void Function(bool paid)? decide,
+  }) {
     final theme = Theme.of(context);
     final c = context.mc;
     final date = nextDueDate(p);
-    final now = DateTime.now();
+    final now = data.now();
     final today = DateTime(now.year, now.month, now.day);
     final busy = data.planBusy(p.id);
     final live = p.active && !p.isFinished;
+    final open = decide != null && isPaymentOpen(p, now);
     final status = p.isFinished
         ? 'Finished'
         : !p.active
@@ -253,12 +278,35 @@ class InstallmentsScreen extends StatelessWidget {
                 child: LinearProgressIndicator(minHeight: 2),
               ),
             const SizedBox(height: 12),
-            if (live && date != null)
-              FilledButton(
-                onPressed: busy ? null : () => _pay(context, data, p),
-                child: Text('Mark ${dayMonth(date)} paid'),
+            if (live && date != null && decide != null) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: busy || !open ? null : () => decide(true),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Paid'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: busy || !open ? null : () => decide(false),
+                      child: const Text('Not paid'),
+                    ),
+                  ),
+                ],
               ),
-            if (live && date != null) const SizedBox(height: 4),
+              if (!open)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Opens on ${dayMonth(DateTime(date.year, date.month))}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: c.muted),
+                  ),
+                ),
+              const SizedBox(height: 4),
+            ],
             Row(
               children: [
                 if (live && date == null)
@@ -286,32 +334,73 @@ class InstallmentsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _pay(
+  /// Saves one swipe and offers Undo for a few seconds. Returns true when the
+  /// plan moved on, so the card shows the next month.
+  Future<bool> _swipe(
     BuildContext context,
     AppData data,
     InstallmentPlan p,
+    bool paid,
   ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final month = monthYear(p.nextDueDate!);
     try {
-      final applied = await data.markPlanPaid(p);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              applied
-                  ? 'Payment marked paid.'
-                  : 'This plan changed. Check the updated payment date.',
+      final InstallmentPlan? after;
+      if (paid) {
+        if (!await data.markPlanPaid(p)) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text(
+                'This plan changed. Check the updated payment date.',
+              ),
             ),
+          );
+          return false;
+        }
+        after = data.plans.where((x) => x.id == p.id).firstOrNull;
+      } else {
+        after = await data.deferPlan(p);
+      }
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 5),
+            persist: false,
+            content: Text(
+              paid ? '$month marked paid' : '$month moved to the end',
+            ),
+            action: after == null
+                ? null
+                : SnackBarAction(
+                    label: 'Undo',
+                    onPressed: () => _undo(messenger, data, p, after!),
+                  ),
           ),
         );
-      }
+      return true;
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not mark paid. Reload the plan before retrying.',
-            ),
-          ),
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not update. Reload and try again.'),
+        ),
+      );
+      return false;
+    }
+  }
+
+  Future<void> _undo(
+    ScaffoldMessengerState messenger,
+    AppData data,
+    InstallmentPlan before,
+    InstallmentPlan after,
+  ) async {
+    try {
+      await data.restorePlan(before, after);
+    } catch (_) {
+      if (messenger.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Could not undo. Reload the plan.')),
         );
       }
     }
@@ -337,6 +426,45 @@ class InstallmentsScreen extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The card waiting behind a plan: the month that comes after this one.
+class _UpNext extends StatelessWidget {
+  const _UpNext({required this.plan, required this.month});
+
+  final InstallmentPlan plan;
+  final DateTime month;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = context.mc;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.well,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.hairline),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Up next',
+              style: theme.textTheme.labelMedium?.copyWith(color: c.muted),
+            ),
+            const SizedBox(height: 6),
+            Text(monthYear(month), style: theme.textTheme.titleLarge),
+            const SizedBox(height: 2),
+            Text(
+              money(plan.monthlyAmount, plan.currency),
+              style: theme.textTheme.bodySmall?.copyWith(color: c.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PlanForm extends StatefulWidget {
@@ -518,7 +646,11 @@ class _PlanFormState extends State<_PlanForm> {
             const SizedBox(height: 12),
             _field(_monthly, 'Monthly amount', number: true),
             _field(_count, 'Total number of payments', number: true),
-            _field(_paid, 'Payments already made (count, e.g. 6)', number: true),
+            _field(
+              _paid,
+              'Payments already made (count, e.g. 6)',
+              number: true,
+            ),
           ],
           _field(_day, 'Due day of month (1–31)', number: true),
           _field(_month, 'Next unpaid month (YYYY-MM)'),
@@ -535,10 +667,7 @@ class _PlanFormState extends State<_PlanForm> {
               ),
             ),
           if (_error != null)
-            Text(
-              _error!,
-              style: TextStyle(color: context.mc.negative),
-            ),
+            Text(_error!, style: TextStyle(color: context.mc.negative)),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: _busy ? null : _save,
