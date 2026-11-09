@@ -150,16 +150,21 @@ ThemeData masarifiTheme(Brightness brightness, {String? fontFamily}) {
   );
 
   // Display sizes carry the signature: compressed, confident tracking.
-  TextStyle t(double size, FontWeight w, double height, double em, Color color) =>
-      TextStyle(
-        fontFamily: fontFamily,
-        fontSize: size,
-        fontWeight: w,
-        height: height,
-        letterSpacing: size * em,
-        color: color,
-        fontFeatures: tabular,
-      );
+  TextStyle t(
+    double size,
+    FontWeight w,
+    double height,
+    double em,
+    Color color,
+  ) => TextStyle(
+    fontFamily: fontFamily,
+    fontSize: size,
+    fontWeight: w,
+    height: height,
+    letterSpacing: size * em,
+    color: color,
+    fontFeatures: tabular,
+  );
 
   final text = TextTheme(
     displayLarge: t(54, FontWeight.w700, 1.0, -0.08, c.ink),
@@ -314,6 +319,9 @@ ThemeData masarifiTheme(Brightness brightness, {String? fontFamily}) {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: c.card,
       contentTextStyle: text.bodyMedium,
+      // Actions such as Undo use the full ink: white on the dark bar. The
+      // default (inverse primary) is the canvas colour, black on black.
+      actionTextColor: c.ink,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_radiusPill),

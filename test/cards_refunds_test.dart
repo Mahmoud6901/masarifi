@@ -116,6 +116,18 @@ void main() {
     expect(p, isNot(contains('amount =')));
   });
 
+  test('snackbar actions like Undo are white on the dark theme', () {
+    expect(
+      masarifiTheme(Brightness.dark).snackBarTheme.actionTextColor,
+      const Color(0xFFFFFFFF),
+    );
+    // Light mode keeps a dark Undo on its white bar.
+    expect(
+      masarifiTheme(Brightness.light).snackBarTheme.actionTextColor,
+      const Color(0xFF0B0B0B),
+    );
+  });
+
   testWidgets('a payment card shows a delete button only when asked', (
     tester,
   ) async {
