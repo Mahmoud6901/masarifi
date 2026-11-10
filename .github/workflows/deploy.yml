@@ -1,0 +1,14 @@
+name: deploy
+
+# On standby: the job skips itself until the repo variable DEPLOY_TARGET is set. Its deploy steps are written once
+# the server is named; until then its one step fails, so setting the variable early never looks like a deploy.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_TARGET != ''
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No deploy steps yet; they are written once the server is named." && exit 1
