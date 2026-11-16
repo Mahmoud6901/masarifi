@@ -60,7 +60,7 @@ SideStore can do this for you).
    | --- | --- |
    | `ANTHROPIC_API_KEY` | The assistant and reading bank SMS. Without it, SMS reading is off. |
    | `GOOGLE_PLACES_API_KEY` | The place finder (enable *Places API (New)*). Optional. |
-   | `SHORTCUT_URL` | Optional: an iCloud link to your own copy of the Masarifi shortcut. |
+   | `SHORTCUT_URL` | Optional: `https://www.icloud.com/shortcuts/ea24304897084081a5961dab9b7e9137` (the shared Masarifi shortcut) or your own copy. Turns on **Add the Shortcut** in the app. |
    | `ANTHROPIC_MODEL`, `SMS_MODEL` | Optional model overrides. |
 
 5. Open Masarifi. On **Connect your backend**, paste the **Project URL** and the
@@ -82,9 +82,13 @@ automations. Your ingest URL and private token are in the app under
 
 - Tap **Copy Siri prompt** and paste it into *Describe a shortcut* in the
   Shortcuts app. It builds the shortcut with your URL and token already in it.
-- Or, when your project has a `SHORTCUT_URL` secret, tap **Add the Shortcut**:
-  it copies your token and opens that shared shortcut; paste your ingest URL and
-  token when Shortcuts asks.
+- Or add the shared
+  [Masarifi shortcut](https://www.icloud.com/shortcuts/ea24304897084081a5961dab9b7e9137)
+  on your iPhone. It holds no URL or token, so Shortcuts asks for both: paste
+  your ingest URL, then add a header named `x-ingest-token` with your token as
+  its value. Rename it to **Masarifi** so the helpers below can run it.
+  With this link in your project's `SHORTCUT_URL` secret, **Add the Shortcut**
+  in the app copies your token and opens it for you.
 
 **Then add the two triggers.** Open these links on your iPhone to add the two
 helper shortcuts; neither holds a URL or token. Then make one automation for
