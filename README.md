@@ -4,6 +4,9 @@ An iPhone expense tracker for the Gulf. Every Apple Pay tap and bank SMS lands i
 your budget on its own, installments included, and an AI assistant helps you plan
 around them. Your data lives in **your own** Supabase project, not with the author.
 
+[Download the IPA](https://github.com/Mahmoud6901/masarifi/releases/latest) · [العربية](README.ar.md) ·
+[Report a problem](https://github.com/Mahmoud6901/masarifi/issues/new?template=bug_report.yml)
+
 - **Automatic capture:** Apple Pay taps (Wallet automation) and bank SMS
   (read by AI), saved once even when both arrive. New cards are learned and bank
   refunds are matched to the original payment.
@@ -13,7 +16,8 @@ around them. Your data lives in **your own** Supabase project, not with the auth
 - **Expenses:** the last five months, each with its total and a per-category line.
 - **Assistant:** asks about your budget, simulates a purchase, and finds and
   compares places (Google Places).
-- Arabic and English (RTL), dark and light themes. Default currency SAR; AED,
+- English interface, laid out right to left on an iPhone set to Arabic; dark
+  and light themes. Default currency SAR; AED,
   KWD, QAR, BHD and OMR also supported.
 
 ## 1. Install the app
@@ -109,7 +113,12 @@ bank SMS.
 - The assistant only reads your data and suggests; all money math is computed in
   code, not by the model.
 
+[PRIVACY.md](PRIVACY.md) lists every connection the app and your functions make.
+
 ## Build from source
+
+Masarifi builds with Flutter 3.47.9. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+setup, tests and releases.
 
 ```bash
 flutter pub get
@@ -132,7 +141,15 @@ node --experimental-strip-types supabase/functions/ci/run-tests.ts
 
 Pushing a `v*` tag runs [the iOS workflow](.github/workflows/ios-ipa.yml): it
 analyzes, tests, builds an unsigned IPA with no backend inside and attaches it
-to a GitHub Release.
+to a GitHub Release. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Report a problem
+
+Include the Masarifi version, your iOS version, what you did and what you
+expected. For a capture problem, include the Shortcut's reply line. Issues are
+public: never paste your ingest token, keys, project URL or bank SMS.
+[Open a bug report](https://github.com/Mahmoud6901/masarifi/issues/new?template=bug_report.yml)
+or [share how setup went](https://github.com/Mahmoud6901/masarifi/issues/new?template=first_use_feedback.yml).
 
 ## License
 

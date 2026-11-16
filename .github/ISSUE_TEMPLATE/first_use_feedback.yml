@@ -1,0 +1,43 @@
+name: First-use feedback / تجربتك الأولى
+description: Tell us how setting up Masarifi went. Arabic and English are welcome.
+title: "[First use] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Masarifi. This report is public: never include your ingest token, keys, project URL, bank SMS or real amounts.
+        يمكنك الكتابة بالعربية أو الإنجليزية. التقرير عام، فلا تكتب رمزك الخاص أو مفاتيحك أو رسائل البنك أو مبالغك الحقيقية.
+  - type: input
+    id: version
+    attributes:
+      label: Masarifi version / إصدار التطبيق
+      placeholder: "1.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How far did you get? / إلى أين وصلت؟
+      options:
+        - Could not install the IPA
+        - Installed, but setting up Supabase stopped me
+        - Connected and added expenses by hand
+        - Apple Pay taps are captured
+        - Apple Pay taps and bank SMS are captured
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: What worked, and where did you get stuck? / ما الذي نجح، وأين توقفت؟
+      description: Describe the step generally. Synthetic examples are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: return
+    attributes:
+      label: Will you keep using it? / هل ستستمر في استخدامه؟
+      options:
+        - "Yes"
+        - Maybe, after a fix
+        - "No"
