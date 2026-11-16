@@ -86,16 +86,22 @@ automations. Your ingest URL and private token are in the app under
   it copies your token and opens that shared shortcut; paste your ingest URL and
   token when Shortcuts asks.
 
-**Then add the two triggers** in the Shortcuts app:
+**Then add the two triggers.** Open these links on your iPhone to add the two
+helper shortcuts; neither holds a URL or token. Then make one automation for
+each in the Shortcuts app (**Automation › New Automation**):
 
-1. **Apple Pay:** a shortcut that starts with *When Any Card is tapped*, then a
-   *Dictionary* of `amount`, `merchant` and `card` from the Wallet input, then
-   *Run Shortcut* **Masarifi** with the Dictionary as input.
-2. **Bank SMS:** save each bank's SMS sender as a contact. Make a shortcut that
-   starts with *When I receive a message* where *Sender* is your banks, then
-   *Run Shortcut* **Masarifi** with the *Message* as input.
+1. **Apple Pay:** add
+   [Run Masarifi on Wallet Tap](https://www.icloud.com/shortcuts/15d526f6d37a4c1795ae36d50427c59b).
+   It puts the Wallet `amount`, `merchant` and `card` in a Dictionary and runs
+   **Masarifi** with it. Automation: **Wallet › When Any Card is tapped**, then
+   *Run Shortcut* **Run Masarifi on Wallet Tap**.
+2. **Bank SMS:** save each bank's SMS sender as a contact, and add
+   [Masarifi SMS](https://www.icloud.com/shortcuts/dad66682e78b4c21b73de2e6c5cfd5c5),
+   which runs **Masarifi** with the message. Automation: **Message**, where
+   *Sender* is your banks, then *Run Shortcut* **Masarifi SMS**. Or skip the
+   helper: run **Masarifi** directly with the *Message* as input.
 
-Set both to run immediately. After a payment you get a short notification such
+Set both automations to run immediately. After a payment you get a short notification such
 as `✓ 10.50 SAR · HungerStation`. In-app and online payments are caught by the
 bank SMS.
 
