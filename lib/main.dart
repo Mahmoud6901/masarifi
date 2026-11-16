@@ -5,12 +5,15 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'backend_config.dart';
 import 'data.dart';
 import 'screens/auth_screen.dart';
+import 'screens/connect_screen.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
 
-// Provided at build time: --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+// Optional, for personal/dev builds: --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+// The public IPA has neither; each person connects their own project in the app.
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
@@ -20,19 +23,42 @@ Future<void> startApp({
   String url = supabaseUrl,
   String anonKey = supabaseAnonKey,
   Future<void> Function()? initialize,
+  Future<BackendConfig?> Function() loadSaved = loadSavedBackend,
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (url.trim().isEmpty || anonKey.trim().isEmpty) {
-    runApp(
-      const _ConfigErrorApp(
-        message:
-            'Missing SUPABASE_URL / SUPABASE_ANON_KEY build configuration.',
-      ),
-    );
+  if (url.trim().isNotEmpty && anonKey.trim().isNotEmpty) {
+    backendChosenInApp = false;
+    await _launch(BackendConfig(url.trim(), anonKey.trim()), initialize);
     return;
   }
+  final saved = await loadSaved();
+  if (saved != null) {
+    backendChosenInApp = true;
+    await _launch(saved, initialize);
+    return;
+  }
+  _showConnect(initialize);
+}
+
+/// Shows the Connect screen; Settings comes back here after disconnecting.
+void _showConnect(Future<void> Function()? initialize) {
+  reconnectBackend = () async => _showConnect(initialize);
+  runApp(
+    _ConnectApp(
+      onConnected: (config) async {
+        backendChosenInApp = true;
+        await _launch(config, initialize);
+      },
+    ),
+  );
+}
+
+Future<void> _launch(
+  BackendConfig config,
+  Future<void> Function()? initialize,
+) async {
   try {
-    final uri = Uri.tryParse(url);
+    final uri = Uri.tryParse(config.url);
     if (uri == null ||
         !uri.hasAuthority ||
         !['https', 'http'].contains(uri.scheme)) {
@@ -41,17 +67,51 @@ Future<void> startApp({
     if (initialize != null) {
       await initialize();
     } else {
-      await Supabase.initialize(url: url, publishableKey: anonKey);
+      await Supabase.initialize(
+        url: config.url,
+        publishableKey: config.anonKey,
+      );
     }
   } catch (_) {
     runApp(
-      const _ConfigErrorApp(
-        message: 'Could not initialize Masarifi. Check the backend configuration and restart the app.',
+      _ConfigErrorApp(
+        message:
+            'Could not initialize Masarifi. Check the backend configuration and restart the app.',
+        onReset: backendChosenInApp
+            ? () async {
+                await forgetBackend();
+                _showConnect(initialize);
+              }
+            : null,
       ),
     );
     return;
   }
+  activeBackendUrl = config.url;
+  reconnectBackend = () async {
+    // Lets a different project be initialized afterwards.
+    await Supabase.instance.dispose();
+    _showConnect(initialize);
+  };
   runApp(const MasarifiApp());
+}
+
+class _ConnectApp extends StatelessWidget {
+  const _ConnectApp({required this.onConnected});
+
+  final Future<void> Function(BackendConfig config) onConnected;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Masarifi مصاريفي',
+    debugShowCheckedModeBanner: false,
+    theme: masarifiTheme(Brightness.light),
+    darkTheme: masarifiTheme(Brightness.dark),
+    themeMode: ThemeMode.system,
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    supportedLocales: const [Locale('en'), Locale('ar')],
+    home: ConnectScreen(onConnected: onConnected),
+  );
 }
 
 class MasarifiApp extends StatelessWidget {
@@ -144,9 +204,12 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 class _ConfigErrorApp extends StatelessWidget {
-  const _ConfigErrorApp({required this.message});
+  const _ConfigErrorApp({required this.message, this.onReset});
 
   final String message;
+
+  /// Offered when the project was chosen in the app: connect another one.
+  final Future<void> Function()? onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +218,19 @@ class _ConfigErrorApp extends StatelessWidget {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(message, textAlign: TextAlign.center),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(message, textAlign: TextAlign.center),
+                if (onReset != null) ...[
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: onReset,
+                    child: const Text('Connect another project'),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),

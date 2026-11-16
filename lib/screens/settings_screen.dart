@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../backend_config.dart';
 import '../data.dart';
 import '../logic.dart';
 import '../format.dart';
@@ -20,12 +21,10 @@ String siriPrompt(String ingestUrl, String token) =>
     'Show Notification showing the Contents of URL. Do not add any other actions.';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({
-    super.key,
-    this.supabaseUrl = const String.fromEnvironment('SUPABASE_URL'),
-  });
+  const SettingsScreen({super.key, this.supabaseUrl});
 
-  final String supabaseUrl;
+  /// The project's base URL; defaults to the one connected at startup.
+  final String? supabaseUrl;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -43,7 +42,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final data = context.watch<AppData>();
     final profile = data.profile;
-    final baseUrl = widget.supabaseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    final baseUrl = (widget.supabaseUrl ?? activeBackendUrl).trim().replaceFirst(
+      RegExp(r'/+$'),
+      '',
+    );
     final uri = Uri.tryParse(baseUrl);
     final ingestUrl =
         uri != null &&
@@ -298,8 +300,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+        if (backendChosenInApp && uri != null && uri.host.isNotEmpty) ...[
+          const SizedBox(height: 32),
+          Text('Backend', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                title: Text(uri.host),
+                subtitle: const Text('Your Supabase project'),
+                trailing: TextButton(
+                  onPressed: () => _disconnect(data),
+                  child: const Text('Disconnect'),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  /// Signs out, forgets the project on this device and returns to Connect.
+  /// The data stays in the project.
+  Future<void> _disconnect(AppData data) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Disconnect this project?'),
+        content: const Text(
+          'You will be signed out and can connect another Supabase project. '
+          'Your data stays in this project.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await data.signOut();
+      await forgetBackend();
+      await reconnectBackend?.call();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not disconnect. Try again.')),
+        );
+      }
+    }
   }
 
   static const _steps = [

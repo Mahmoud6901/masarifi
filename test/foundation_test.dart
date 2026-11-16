@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:masarifi/backend_config.dart';
 import 'package:masarifi/data.dart';
 import 'package:masarifi/main.dart' as app;
 import 'package:masarifi/models.dart';
 import 'package:masarifi/screens/auth_screen.dart';
 import 'package:masarifi/screens/home_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const _url = 'https://example.supabase.co';
@@ -548,25 +550,43 @@ void main() {
       },
     );
 
-    testWidgets('missing config does not initialize the backend', (
+    testWidgets('no built-in or saved project asks to connect one', (
       tester,
     ) async {
       var initialized = false;
       await app.startApp(
         url: '',
         anonKey: '',
+        loadSaved: () async => null,
         initialize: () async {
           initialized = true;
         },
       );
       await tester.pumpAndSettle();
       expect(initialized, isFalse);
+      expect(find.text('Connect your backend'), findsOneWidget);
+    });
+
+    testWidgets('a saved project that fails to start can be replaced', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      await app.startApp(
+        url: '',
+        anonKey: '',
+        loadSaved: () async =>
+            const BackendConfig('https://abcd1234.supabase.co', 'anon-key'),
+        initialize: () async => throw StateError('anon-key'),
+      );
+      await tester.pumpAndSettle();
       expect(
-        find.text(
-          'Missing SUPABASE_URL / SUPABASE_ANON_KEY build configuration.',
-        ),
+        find.textContaining('Could not initialize Masarifi'),
         findsOneWidget,
       );
+      expect(find.textContaining('anon-key'), findsNothing);
+      await tester.tap(find.text('Connect another project'));
+      await tester.pumpAndSettle();
+      expect(find.text('Connect your backend'), findsOneWidget);
     });
 
     testWidgets(

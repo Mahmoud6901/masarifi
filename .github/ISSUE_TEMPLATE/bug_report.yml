@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in Masarifi doesn't work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This report is public. Never paste your ingest token, keys, project URL, bank SMS or amounts you want to keep private.
+  - type: input
+    id: version
+    attributes:
+      label: Masarifi version
+      description: The release you installed.
+      placeholder: "1.5.0"
+    validations:
+      required: true
+  - type: input
+    id: ios
+    attributes:
+      label: iOS version
+      placeholder: "26.1"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. For a capture problem, include the Shortcut's reply line.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
