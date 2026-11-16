@@ -1,7 +1,9 @@
 name: Build iOS IPA
 
-# Builds an UNSIGNED .ipa. Sideloadly signs it with your Apple ID when you install it.
-# Push a tag like v1.0.0 to publish a GitHub Release with the IPA attached.
+# Builds an UNSIGNED .ipa with no backend inside: on first launch each person
+# connects their own Supabase project. Sideloadly (or AltStore/SideStore) signs
+# it with the installer's Apple ID.
+# Push a tag like v1.5.0 to publish a GitHub Release with the IPA attached.
 on:
   push:
     tags: ["v*"]
@@ -15,20 +17,6 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Check required Supabase build secrets
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        shell: bash
-        run: |
-          missing=()
-          [[ -n "$SUPABASE_URL" ]] || missing+=(SUPABASE_URL)
-          [[ -n "$SUPABASE_ANON_KEY" ]] || missing+=(SUPABASE_ANON_KEY)
-          if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required repository secret(s): %s\n' "${missing[*]}" >&2
-            exit 1
-          fi
 
       - uses: subosito/flutter-action@v2
         with:
@@ -74,14 +62,8 @@ jobs:
             --baseUrl "$tool_dir/node_modules" \
             "${source_files[@]}"
 
-      - name: Build iOS (no codesign)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: |
-          flutter build ios --release --no-codesign \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+      - name: Build iOS (no codesign, no backend built in)
+        run: flutter build ios --release --no-codesign
 
       - name: Package and verify IPA
         shell: bash
