@@ -18,9 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Pinned: Flutter 3.50 moves Material to package:material_ui, which this
+      # app has not migrated to yet. Bump together with that migration.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.9
           cache: true
 
       - uses: actions/setup-node@v6
