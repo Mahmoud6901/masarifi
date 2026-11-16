@@ -77,12 +77,16 @@
 - أو إذا كان في مشروعك المفتاح `SHORTCUT_URL`، اضغط **Add the Shortcut**: ينسخ رمزك ويفتح الاختصار المشترك، ثم الصق
   الرابط والرمز عندما يطلبهما.
 
-**ثم أضف المشغّلين** في تطبيق الاختصارات:
+**ثم أضف المشغّلين.** افتح هذين الرابطين على الـ iPhone لإضافة الاختصارين المساعدين، ولا يحتوي أي منهما على رابط أو
+رمز. ثم أنشئ أتمتة لكل منهما في تطبيق الاختصارات (**Automation › New Automation**):
 
-1. **Apple Pay:** أتمتة تبدأ بـ *When Any Card is tapped*، ثم *Dictionary* فيه `amount` و `merchant` و `card` من
-   مدخلات المحفظة، ثم *Run Shortcut* **Masarifi** والقاموس مدخلًا له.
-2. **رسائل البنك:** احفظ اسم مرسل رسائل كل بنك جهةَ اتصال. أنشئ أتمتة تبدأ بـ *When I receive a message* والمرسل هو
-   بنوكك، ثم *Run Shortcut* **Masarifi** والرسالة مدخلًا له.
+1. **Apple Pay:** أضف [Run Masarifi on Wallet Tap](https://www.icloud.com/shortcuts/15d526f6d37a4c1795ae36d50427c59b).
+   يضع `amount` و `merchant` و `card` من المحفظة في قاموس ويشغّل **Masarifi** به. الأتمتة:
+   **Wallet › When Any Card is tapped**، ثم *Run Shortcut* **Run Masarifi on Wallet Tap**.
+2. **رسائل البنك:** احفظ اسم مرسل رسائل كل بنك جهةَ اتصال، وأضف
+   [Masarifi SMS](https://www.icloud.com/shortcuts/dad66682e78b4c21b73de2e6c5cfd5c5) الذي يشغّل **Masarifi** بالرسالة.
+   الأتمتة: **Message** والمرسل هو بنوكك، ثم *Run Shortcut* **Masarifi SMS**. أو استغنِ عنه وشغّل **Masarifi**
+   مباشرة والرسالة مدخلًا له.
 
 اجعل الأتمتتين تعملان فورًا. بعد كل دفعة يصلك إشعار قصير مثل `✓ 10.50 SAR · HungerStation`. الدفعات داخل التطبيقات
 وعلى الإنترنت تلتقطها رسائل البنك.
