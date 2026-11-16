@@ -1,90 +1,139 @@
 # Masarifi (مصاريفي)
 
-Expense tracker for iPhone with Apple Pay capture, installment planning, and an AI assistant that also finds and compares places. Flutter + Supabase. Default currency SAR.
+An iPhone expense tracker for the Gulf. Every Apple Pay tap and bank SMS lands in
+your budget on its own, installments included, and an AI assistant helps you plan
+around them. Your data lives in **your own** Supabase project, not with the author.
 
-## One-time setup
+- **Automatic capture:** Apple Pay taps (Wallet automation) and bank SMS
+  (read by AI), saved once even when both arrive. New cards are learned and bank
+  refunds are matched to the original payment.
+- **Safe to spend this month:** income − installments due − spending so far.
+- **Installments:** swipe right when a month is paid, left when it isn't (that
+  month moves to the end of the plan), with Undo.
+- **Expenses:** the last five months, each with its total and a per-category line.
+- **Assistant:** asks about your budget, simulates a purchase, and finds and
+  compares places (Google Places).
+- Arabic and English (RTL), dark and light themes. Default currency SAR; AED,
+  KWD, QAR, BHD and OMR also supported.
 
-### 1. Supabase
+## 1. Install the app
 
-1. Create a project at supabase.com.
-2. SQL editor: apply the migrations once, in order: `001_init.sql`, `002_profile_privileges.sql`, `003_apple_pay_capture.sql`, then `004_phase3_installments.sql`, all in `supabase/migrations/`. A fresh database needs all four; an existing database needs only migrations it has not applied. Do this before using token rotation, ingest or installment payments. The rollback-only scripts in `supabase/tests/` are intended for a disposable Supabase database. The reviewer ran the migrations, SQL regressions, RLS and concurrency checks in throwaway PostgreSQL 17/PostgREST containers with GoTrue stubbed; real GoTrue and the Supabase platform remain unverified.
-3. Install the Supabase CLI, then:
+Masarifi is not on the App Store. You install the IPA yourself:
+
+1. Download **`Masarifi.ipa`** from the [latest release](../../releases/latest).
+2. Install it with a sideloading tool and your Apple ID:
+   - [Sideloadly](https://sideloadly.io) (Windows or Mac): connect the iPhone,
+     drop in the IPA, sign in, install.
+   - Or [AltStore](https://altstore.io) / [SideStore](https://sidestore.io),
+     which can refresh the app from the iPhone itself.
+3. On the iPhone, trust your Apple ID under **Settings › General › VPN & Device
+   Management**, and turn on **Settings › Privacy & Security › Developer Mode**
+   if iOS asks.
+
+With a free Apple ID the install lasts 7 days; re-sign it weekly (AltStore and
+SideStore can do this for you).
+
+## 2. Set up your backend (once, about 15 minutes)
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In **SQL Editor**, run each file in [`supabase/migrations`](supabase/migrations)
+   in order: `001` → `005`.
+3. Deploy the two functions with the [Supabase CLI](https://supabase.com/docs/guides/cli):
+
    ```bash
-   supabase link --project-ref <your-ref>
+   supabase login
+   supabase link --project-ref <your-project-ref>
    supabase functions deploy ingest --no-verify-jwt
    supabase functions deploy agent
-   supabase secrets set ANTHROPIC_API_KEY=<key> GOOGLE_PLACES_API_KEY=<key>
-   ```
-   `ingest` is called by the iOS Shortcut with a personal token (not a login), so it is deployed with `--no-verify-jwt`. `agent` requires a signed-in user.
-4. Google Places API (New) must be enabled for the Places key.
-
-For a disposable database that has only 001–003, `supabase/tests/004_phase3_upgrade_regression.sql` applies 004 inside a rollback transaction and checks legacy value, currency and schedule preservation. It requires `psql` with `ON_ERROR_STOP=1`; do not run it after 004 is already applied. The separate `004_phase3_installments_regression.sql` checks the resulting schema after all four migrations. Both passed in the reviewer's disposable database; neither was run against a deployed Supabase project.
-
-### 2. Apple Pay capture
-
-In the app: Settings shows your ingest URL and private token. Follow the steps there to create the Shortcuts "Transaction" automation.
-
-## Release
-
-The workflow is prepared; its first GitHub Actions/macOS run and a real IPA installation are **unexecuted**. This folder has no Git repository yet. Repository creation, the first push, secrets and release tags are user-owned setup steps; they were not performed by this task.
-
-1. Put the source in your GitHub repository. In Settings > Secrets and variables > Actions, add `SUPABASE_URL` and `SUPABASE_ANON_KEY`. Use the project's client anon/publishable key, never a service-role key. The URL and client key are embedded in the app; Anthropic and Places keys belong only in Supabase secrets. The workflow fails with the missing variable's name if either build secret is empty.
-2. For an artifact build, open Actions > Build iOS IPA > Run workflow. Each successful configured run uploads the `Masarifi-ipa` artifact. Download and extract that artifact ZIP to obtain `Masarifi.ipa`. A manual run never publishes a GitHub Release, even when a tag is selected.
-3. For a release, push a new `v*` tag after reviewing the source. The initial `pubspec.yaml` version is `1.0.0+1`, corresponding to tag `v1.0.0`. For an already configured repository, the tag commands are:
-
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
    ```
 
-   Only a `v*` tag **push** attaches `Masarifi.ipa` to a GitHub Release. Download the IPA directly from that Release's Assets. Failed checks or a failed build do not produce an IPA.
-4. Open the unsigned IPA in Sideloadly, connect the iPhone, sign in with your Apple ID and install. Sideloadly signs the app for your device; the workflow does not sign it or submit it to the App Store. A free Apple ID signs for 7 days, so re-sideload weekly. On the iPhone, use Settings > General > VPN & Device Management to trust your Apple ID when prompted.
+   `ingest` is called by your Shortcut with a private token, not a login, so it
+   is deployed without JWT verification. `agent` requires a signed-in user.
+4. Add secrets under **Project Settings › Edge Functions › Secrets** (or
+   `supabase secrets set NAME=value`):
 
-The macOS workflow runs Flutter analysis/tests and the portable Edge Function tests/type check before `flutter build ios --release --no-codesign`. It packages `Payload/Runner.app` into `Masarifi.ipa` and fails if the app or expected archive is missing. No Apple signing certificate is required for this unsigned build.
+   | Secret | Needed for |
+   | --- | --- |
+   | `ANTHROPIC_API_KEY` | The assistant and reading bank SMS. Without it, SMS reading is off. |
+   | `GOOGLE_PLACES_API_KEY` | The place finder (enable *Places API (New)*). Optional. |
+   | `SHORTCUT_URL` | Optional: an iCloud link to your own copy of the Masarifi shortcut. |
+   | `ANTHROPIC_MODEL`, `SMS_MODEL` | Optional model overrides. |
 
-## Local development
+5. Open Masarifi. On **Connect your backend**, paste the **Project URL** and the
+   **anon key** from **Project Settings › API**. The app refuses the
+   `service_role` and secret keys; never put those on a phone.
+6. Create your account in the app. By default Supabase emails a confirmation
+   link first.
+
+Supabase's free tier is enough for one person. Anthropic and Google bill you
+directly for what your own project uses.
+
+## 3. Capture payments automatically (Shortcuts)
+
+Masarifi receives payments from one Shortcut named **Masarifi**, run by two
+automations. Your ingest URL and private token are in the app under
+**Settings › Payment capture**.
+
+**Get the Masarifi shortcut** (either way):
+
+- Tap **Copy Siri prompt** and paste it into *Describe a shortcut* in the
+  Shortcuts app. It builds the shortcut with your URL and token already in it.
+- Or, when your project has a `SHORTCUT_URL` secret, tap **Add the Shortcut**:
+  it copies your token and opens that shared shortcut; paste your ingest URL and
+  token when Shortcuts asks.
+
+**Then add the two triggers** in the Shortcuts app:
+
+1. **Apple Pay:** a shortcut that starts with *When Any Card is tapped*, then a
+   *Dictionary* of `amount`, `merchant` and `card` from the Wallet input, then
+   *Run Shortcut* **Masarifi** with the Dictionary as input.
+2. **Bank SMS:** save each bank's SMS sender as a contact. Make a shortcut that
+   starts with *When I receive a message* where *Sender* is your banks, then
+   *Run Shortcut* **Masarifi** with the *Message* as input.
+
+Set both to run immediately. After a payment you get a short notification such
+as `✓ 10.50 SAR · HungerStation`. In-app and online payments are caught by the
+bank SMS.
+
+## Privacy
+
+- Everything is stored in your Supabase project, behind row-level security:
+  each account sees only its own rows. The author of Masarifi has no access.
+- The ingest token lets a Shortcut add expenses to your account. Keep it
+  private; **Settings › Regenerate token** replaces it.
+- No card numbers are stored: only the Wallet card name and the last four
+  digits a bank SMS shows.
+- Bank SMS text is sent from **your** `ingest` function to Anthropic with
+  **your** key to read the amount. Leave `ANTHROPIC_API_KEY` unset to keep SMS
+  out of it.
+- The assistant only reads your data and suggests; all money math is computed in
+  code, not by the model.
+
+## Build from source
 
 ```bash
 flutter pub get
 flutter analyze
 flutter test
-flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<key>
+flutter run    # shows the Connect screen
 ```
 
-Run all five portable Edge suites with an existing Node 22 installation:
+To skip the Connect screen in a personal build, pass your project at build time:
+
+```bash
+flutter run --dart-define=SUPABASE_URL=<url> --dart-define=SUPABASE_ANON_KEY=<anon key>
+```
+
+Edge Function tests run on Node 22:
 
 ```bash
 node --experimental-strip-types supabase/functions/ci/run-tests.ts
 ```
 
-CI installs pinned TypeScript 5.4.5, Node types 22.13.8 and Supabase JS 2.58.0 in its temporary directory for the strict check. `supabase/functions/ci/deno.d.ts` describes only the used Deno boundary and maps the `npm:` import to those SDK types. Dependency declarations use `skipLibCheck`; application and test sources remain strict. The local check used the existing compiler and Node types; the Supabase SDK types were unavailable locally, so checking against the pinned SDK remains **unexecuted until CI**.
+Pushing a `v*` tag runs [the iOS workflow](.github/workflows/ios-ipa.yml): it
+analyzes, tests, builds an unsigned IPA with no backend inside and attaches it
+to a GitHub Release.
 
-Keep local environment files out of source control. `.gitignore` covers local `.env` variants, generated build/tooling directories, CocoaPods and Android local properties; a sanitized `.env.example` may be included. Personal ingest tokens must stay private.
+## License
 
-## Handover
-
-Local Flutter and portable Node tests use fake services. They establish logic and request handling, not a deployed integration. Shared Dart/TypeScript budget fixtures cover the accepted currency, calendar and provisional-schedule rules. The strict TypeScript check is separate from Deno runtime verification.
-
-A local read-only credential audit found no real credential in the inspected source/configuration or workspace files. Candidates were test fixtures, workflow variable references and PEM delimiter strings in an ignored compiler cache, with no complete key block. No credential values were printed. This scan does not cover external repository history or replace reviewing files before the first push.
-
-Earlier review ran migrations 001–004, SQL regressions, owner isolation and concurrent recorder/payment checks in disposable PostgreSQL 17/PostgREST containers with GoTrue stubbed. That evidence was not rerun in this release phase and does not verify real GoTrue or a hosted Supabase project.
-
-| Remaining setup or verification | Status and owner action |
-| --- | --- |
-| Supabase project and migrations | **Unexecuted on hosted Supabase.** Create/link the project and apply all unapplied migrations in order 001–004 before using the app. |
-| Edge deployment | **Unexecuted.** Deploy `ingest --no-verify-jwt` for the personal-token Shortcut and deploy `agent` with signed-in-user verification. |
-| Provider keys and live services | **Unexecuted.** Configure server-only Anthropic/Google Places keys and enable Places API (New); verify real model/tool replies and Places results. No paid or live provider calls were made for this phase. |
-| Real auth, RLS and adapters | **Unexecuted against the Supabase platform.** Verify real GoTrue sessions, owner isolation and the real Supabase JavaScript adapters after deployment. Disposable-database and fake-fetch evidence has the limits above. |
-| Deno test/check/runtime | **Unexecuted.** Node and strict TypeScript are the portable CI baseline; they do not prove Deno execution. |
-| First Actions/macOS build and release | **Unexecuted.** Configure the two GitHub build secrets, run the workflow and inspect/download the archive. The workflow definition has not produced a verified IPA here. |
-| Device installation and Shortcut | **Unexecuted.** Install/sign the IPA, test login and a real Transaction automation, and verify amount/currency, duplicates and manual fallback. CLDR-formatted amount tests remain a proxy for real Shortcuts output. |
-| Places costs | User-owned: Google Places searches may incur charges after key configuration/deployment. Each `search_places` invocation makes at most two Text Search requests: area lookup, then place search. |
-| GPS search | Outside this phase. Place search uses the city/area you type and straight-line distance from its approximate centre. |
-
-## Notes
-
-- Each signed-in user only sees their own rows (row-level security). Anyone with your ingest token can add expenses to your account, so keep it private.
-- The agent only reads data and suggests; all money math is computed in code, not by the model.
-- The app and assistant budget use complete same-currency month-to-date spending and unpaid installments due by month-end, including overdue payments. Foreign amounts are shown in their own currency; no FX conversion occurs. Legacy plans need an owner-confirmed schedule and reserve one provisional payment until then. Marking an installment paid changes the plan only; capture or enter its cash expense separately. The assistant uses code-computed monetary results and gives no confident purchase verdict when the baseline is provisional.
-- Google Places gives price level (and sometimes a price range), not exact menu prices. The assistant says when a price is an estimate.
-- Google Places searches may incur charges after you configure a key and deploy. Each `search_places` invocation makes at most two Text Search requests (area lookup, then place search).
+[MIT](LICENSE)
